@@ -772,7 +772,7 @@ void CoarseTracker::debugPlotIDepthMap(float* minID_pt, float* maxID_pt, std::ve
 		}
 
 
-		MinimalImageB3 mf(w[lvl], h[lvl]);
+                static MinimalImageB3 mf(w[lvl], h[lvl]);
 		mf.setBlack();
 		for(int i=0;i<h[lvl]*w[lvl];i++)
 		{

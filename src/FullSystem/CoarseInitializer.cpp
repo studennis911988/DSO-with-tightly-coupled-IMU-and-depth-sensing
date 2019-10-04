@@ -20,7 +20,7 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
+#include "trace_code.h"
 
 /*
  * KFBuffer.cpp
@@ -126,7 +126,10 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 
 		if(lvl<pyrLevelsUsed-1)
 			propagateDown(lvl+1);
-
+#if TRACE_CODE_MODE
+  std::cout << "VO calcResAndGS" << "\t "
+            << "lvl " <<lvl <<std::endl;
+#endif
 		Mat88f H,Hsc; Vec8f b,bsc;
 		resetPoints(lvl);
 		Vec3f resOld = calcResAndGS(lvl, H, b, Hsc, bsc, refToNew_current, refToNew_aff_current, false);
@@ -212,6 +215,7 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 
 				if(resNew[1] == alphaK*numPoints[lvl])
 					snapped = true;
+
 				H = H_new;
 				b = b_new;
 				Hsc = Hsc_new;
@@ -269,7 +273,11 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 
 
     debugPlot(0,wraps);
-
+#if TRACE_CODE_MODE
+  std::cout << "trace frame" << "\t "
+            << "newFrameHessian->shell->id " <<newFrameHessian->shell->id << "\t"
+              << "newFrameHessian->frameID " <<newFrameHessian->frameID<<std::endl;
+#endif
 
 
 	return snapped && frameID > snappedAt+5;
@@ -286,7 +294,7 @@ void CoarseInitializer::debugPlot(int lvl, std::vector<IOWrap::Output3DWrapper*>
 	int wl = w[lvl], hl = h[lvl];
 	Eigen::Vector3f* colorRef = firstFrame->dIp[lvl];
 
-	MinimalImageB3 iRImg(wl,hl);
+        static MinimalImageB3 iRImg(wl,hl);
 
 	for(int i=0;i<wl*hl;i++)
 		iRImg.at(i) = Vec3b(colorRef[i][0],colorRef[i][0],colorRef[i][0]);
@@ -766,12 +774,17 @@ void CoarseInitializer::makeGradients(Eigen::Vector3f** data)
 }
 void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHessian)
 {
-
+#if TRACE_CODE_MODE
+  std::cout << "setFirst" << std::endl;
+#endif
 	makeK(HCalib);
 	firstFrame = newFrameHessian;
 
 	PixelSelector sel(w[0],h[0]);
-
+#if TRACE_CODE_MODE
+  std::cout << "PixelSelector" << "\t "
+            << "w[0]" <<w[0] << std::endl;
+#endif
 	float* statusMap = new float[w[0]*h[0]];
 	bool* statusMapB = new bool[w[0]*h[0]];
 
@@ -786,14 +799,18 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 			npts = makePixelStatus(firstFrame->dIp[lvl], statusMapB, w[lvl], h[lvl], densities[lvl]*w[0]*h[0]);
 
 
-
+#if TRACE_CODE_MODE
+  std::cout << "makePixelStatus" << "\t "
+            << "pyrLevelsUsed" <<lvl << "\t "
+               << "npts " <<npts << std::endl;
+#endif
 		if(points[lvl] != 0) delete[] points[lvl];
 		points[lvl] = new Pnt[npts];
 
-		// set idepth map to initially 1 everywhere.
+        // set idepth map to initially 1 everywhere.
 		int wl = w[lvl], hl = h[lvl];
 		Pnt* pl = points[lvl];
-		int nl = 0;
+        int nl = 0;
 		for(int y=patternPadding+1;y<hl-patternPadding-2;y++)
 		for(int x=patternPadding+1;x<wl-patternPadding-2;x++)
 		{
@@ -810,7 +827,14 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 				pl[nl].lastHessian=0;
 				pl[nl].lastHessian_new=0;
 				pl[nl].my_type= (lvl!=0) ? 1 : statusMap[x+y*wl];
-
+#if TRACE_CODE_MODE
+//  std::cout << "set idepth map to initially 1 everywhere." << "\t "
+//            << "y" <<y<< "\t "
+//               << "x" <<x<< "\t "
+//               << "nl " <<nl << "\t "
+//               << "pl[nl].idepth" <<pl[nl].idepth << "\t "
+//               << std::endl;
+#endif
 				Eigen::Vector3f* cpt = firstFrame->dIp[lvl] + x + y*w[lvl];
 				float sumGrad2=0;
 				for(int idx=0;idx<patternNum;idx++)
@@ -836,6 +860,11 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 
 
 		numPoints[lvl]=nl;
+#if TRACE_CODE_MODE
+  std::cout << "numPoints[lvl]" << "\t "
+            << "numPoints[lvl] " <<numPoints[lvl]<< "\t "
+               << "lvl" <<lvl << std::endl;
+#endif
 	}
 	delete[] statusMap;
 	delete[] statusMapB;
@@ -930,8 +959,12 @@ void CoarseInitializer::applyStep(int lvl)
 void CoarseInitializer::makeK(CalibHessian* HCalib)
 {
 	w[0] = wG[0];
-	h[0] = hG[0];
-
+    h[0] = hG[0];
+#if TRACE_CODE_MODE
+  std::cout << "makeK" << "\t"
+            <<"w[0] " << w[0]  << "\t"
+            <<"h[0] " << h[0]  << std::endl;
+#endif
 	fx[0] = HCalib->fxl();
 	fy[0] = HCalib->fyl();
 	cx[0] = HCalib->cxl();
@@ -945,6 +978,12 @@ void CoarseInitializer::makeK(CalibHessian* HCalib)
 		fy[level] = fy[level-1] * 0.5;
 		cx[level] = (cx[0] + 0.5) / ((int)1<<level) - 0.5;
 		cy[level] = (cy[0] + 0.5) / ((int)1<<level) - 0.5;
+#if TRACE_CODE_MODE
+  std::cout << "makeK" << "\t"
+            <<"w[level]  " << w[level]   << "\t"
+            <<"h[level] " << h[level]  << "\t"
+              <<"pyrLevelsUsed " << level  <<std::endl;
+#endif
 	}
 
 	for (int level = 0; level < pyrLevelsUsed; ++ level)

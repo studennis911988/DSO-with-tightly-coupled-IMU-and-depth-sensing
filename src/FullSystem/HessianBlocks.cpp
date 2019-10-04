@@ -22,7 +22,7 @@
 */
 
 
- 
+#include "trace_code.h"
 #include "FullSystem/HessianBlocks.h"
 #include "util/FrameShell.h"
 #include "FullSystem/ImmaturePoint.h"
@@ -132,6 +132,11 @@ void FrameHessian::makeImages(float* color, CalibHessian* HCalib)
 	{
 		dIp[i] = new Eigen::Vector3f[wG[i]*hG[i]];
 		absSquaredGrad[i] = new float[wG[i]*hG[i]];
+#if TRACE_CODE_MODE
+  std::cout << "makeImages" << "\t"
+            <<"dIp[i]->cols() " << dIp[i]->cols() << "\t"
+            <<"pyrLevelsUsed " << i << std::endl;
+#endif
 	}
 	dI = dIp[0];
 

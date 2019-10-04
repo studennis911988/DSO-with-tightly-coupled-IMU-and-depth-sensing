@@ -21,7 +21,7 @@
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
 
-
+#include "trace_code.h"
 /*
  * KFBuffer.cpp
  *
@@ -277,7 +277,10 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
     for(IOWrap::Output3DWrapper* ow : outputWrapper)
         ow->pushLiveFrame(fh);
 
-
+#if TRACE_CODE_MODE
+  std::cout << "trackNewCoarse" << "\t"
+               <<"fh->shell->id  " << fh->shell->id << std::endl;
+#endif
 
 	FrameHessian* lastF = coarseTracker->lastRef;
 
@@ -439,7 +442,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 		coarseTracker->firstCoarseRMSE = achievedRes[0];
 
     if(!setting_debugout_runquiet)
-        printf("Coarse Tracker tracked ab = %f %f (exp %f). Res %f!\n", aff_g2l.a, aff_g2l.b, fh->ab_exposure, achievedRes[0]);
+      //  printf("Coarse Tracker tracked ab = %f %f (exp %f). Res %f!\n", aff_g2l.a, aff_g2l.b, fh->ab_exposure, achievedRes[0]);
 
 
 
@@ -801,12 +804,19 @@ void FullSystem::flagPointsForRemoval()
 
 void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 {
-
+//    static int count = 0;
     if(isLost) return;
+//    else{
+//        if(count == 50) {
+////           std::cout << "dso alive" << '\n';
+//           count = 0;
+//        }
+//        count += 1;
+//    }
 	boost::unique_lock<boost::mutex> lock(trackMutex);
 
 
-	// =========================== add into allFrameHistory =========================
+    // =========================== add into allFrameHistory =========================
 	FrameHessian* fh = new FrameHessian();
 	FrameShell* shell = new FrameShell();
 	shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
@@ -816,7 +826,12 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
     shell->incoming_id = id;
 	fh->shell = shell;
 	allFrameHistory.push_back(shell);
-
+#if TRACE_CODE_MODE
+  std::cout << "============= add into allFrameHistory ============ " << "\n"
+            <<"shell->incoming_id " << shell->incoming_id << "\t"
+            <<"shell->camToWorld " << "\n" << shell->camToWorld.matrix3x4()<< "\n"
+            <<"allFrameHistory.size() " << allFrameHistory.size() << "\t"          << std::endl;
+#endif
 
 	// =========================== make Images / derivatives etc. =========================
 	fh->ab_exposure = image->exposure_time;
@@ -835,7 +850,11 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 		}
 		else if(coarseInitializer->trackFrame(fh, outputWrapper))	// if SNAPPED
 		{
-
+#if TRACE_CODE_MODE
+  std::cout << "snapped!" << "\t"
+            <<"shell->incoming_id " << shell->incoming_id << "\t"
+            <<"fh->frameID " << fh->frameID << std::endl;
+#endif
 			initializeFromInitializer(fh);
 			lock.unlock();
 			deliverTrackedFrame(fh, true);
@@ -898,6 +917,9 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 
 		lock.unlock();
 		deliverTrackedFrame(fh, needToMakeKF);
+#if TRACE_CODE_MODE
+  std::cout << "========== deliverTrackedFrame ===============" << std::endl;
+#endif
 		return;
 	}
 }
@@ -922,7 +944,11 @@ void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
 		else handleKey( IOWrap::waitKey(1) );
 
 
-
+#if TRACE_CODE_MODE
+  std::cout << "deliverTrackedFrame" << "\t"
+               <<"fh->shell->id " << fh->shell->id << "\t"
+            <<"needKF " << needKF << std::endl;
+#endif
 		if(needKF) makeKeyFrame(fh);
 		else makeNonKeyFrame(fh);
 	}
@@ -1215,16 +1241,35 @@ void FullSystem::initializeFromInitializer(FrameHessian* newFrame)
 	firstFrame->pointHessians.reserve(wG[0]*hG[0]*0.2f);
 	firstFrame->pointHessiansMarginalized.reserve(wG[0]*hG[0]*0.2f);
 	firstFrame->pointHessiansOut.reserve(wG[0]*hG[0]*0.2f);
-
+#if TRACE_CODE_MODE
+  std::cout << "initializeFromInitializer" << "\t"
+               <<"newFrame->shell->id  " << newFrame->shell->id << "\t"
+            <<"firstFrame->idx " << firstFrame->idx << "\t"
+            <<"frameHessians.size() " << frameHessians.size() << "\t"
+           <<"firstFrame->pointHessians " << firstFrame->pointHessians.size() << std::endl;
+#endif
 
 	float sumID=1e-5, numID=1e-5;
 	for(int i=0;i<coarseInitializer->numPoints[0];i++)
 	{
 		sumID += coarseInitializer->points[0][i].iR;
 		numID++;
+#if TRACE_CODE_MODE
+        static size_t coutCNT = 0;
+        if(coutCNT == 1000){
+            std::cout << "sumID" << "\t"
+                      <<"i " << i << "\t"
+                      <<"coarseInitializer->points[0][i].iR; " << coarseInitializer->points[0][i].iR << std::endl;
+            coutCNT = 0;
+        }
+        coutCNT++;
+
+#endif
 	}
 	float rescaleFactor = 1 / (sumID / numID);
-
+#if TRACE_CODE_MODE
+  std::cout << "rescaleFactor =" << rescaleFactor << std::endl;
+#endif
 	// randomly sub-select the points I need.
 	float keepPercentage = setting_desiredPointDensity / coarseInitializer->numPoints[0];
 
@@ -1248,10 +1293,15 @@ void FullSystem::initializeFromInitializer(FrameHessian* newFrame)
 		if(!std::isfinite(ph->energyTH)) {delete ph; continue;}
 
 		ph->setIdepthScaled(point->iR*rescaleFactor);
-		ph->setIdepthZero(ph->idepth);
+        ph->setIdepthZero(ph->idepth);
 		ph->hasDepthPrior=true;
 		ph->setPointStatus(PointHessian::ACTIVE);
-
+#if TRACE_CODE_MODE
+  std::cout << "setIdepthScaled" << point->iR*rescaleFactor<< "\t"
+               <<"i " << i<< "\t"
+            <<"point->iR " << point->iR << "\t"
+            <<"setIdepthZero " << ph->idepth << std::endl;
+#endif
 		firstFrame->pointHessians.push_back(ph);
 		ef->insertPoint(ph);
 	}
@@ -1259,8 +1309,13 @@ void FullSystem::initializeFromInitializer(FrameHessian* newFrame)
 
 
 	SE3 firstToNew = coarseInitializer->thisToNext;
+#if TRACE_CODE_MODE
+  std::cout << "firstToNew" <<"\n" <<firstToNew.matrix3x4()<< std::endl;
+#endif
 	firstToNew.translation() /= rescaleFactor;
-
+#if TRACE_CODE_MODE
+  std::cout << "firstToNew.translation() /= rescaleFactor;" <<"\n"<<firstToNew.matrix3x4()<< std::endl;
+#endif
 
 	// really no lock required, as we are initializing.
 	{
@@ -1276,7 +1331,10 @@ void FullSystem::initializeFromInitializer(FrameHessian* newFrame)
 		newFrame->setEvalPT_scaled(newFrame->shell->camToWorld.inverse(),newFrame->shell->aff_g2l);
 		newFrame->shell->trackingRef = firstFrame->shell;
 		newFrame->shell->camToTrackingRef = firstToNew.inverse();
-
+#if TRACE_CODE_MODE
+  std::cout << "firstFrame->shell->camToWorld " <<firstFrame->shell->camToWorld.matrix3x4() << "\t"
+               <<"newFrame->shell->camToWorld " << newFrame->shell->camToWorld.matrix3x4()<< std::endl;
+#endif
 	}
 
 	initialized=true;
