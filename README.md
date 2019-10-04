@@ -1,4 +1,4 @@
-# DSO: Direct Sparse Odometry
+# DSO_rgbd: Direct Sparse Odometry using RGBD camera
 
 For more information see
 [https://vision.in.tum.de/dso](https://vision.in.tum.de/dso)
