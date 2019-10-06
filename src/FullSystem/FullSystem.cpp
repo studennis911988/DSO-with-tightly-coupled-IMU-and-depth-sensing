@@ -802,17 +802,114 @@ void FullSystem::flagPointsForRemoval()
 }
 
 
-void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
+void FullSystem::addActiveFrame(ImageAndExposure* image, int id) /// 1. all new frame entrance function
 {
-//    static int count = 0;
     if(isLost) return;
-//    else{
-//        if(count == 50) {
-////           std::cout << "dso alive" << '\n';
-//           count = 0;
-//        }
-//        count += 1;
-//    }
+
+    boost::unique_lock<boost::mutex> lock(trackMutex);
+
+
+    // =========================== add into allFrameHistory =========================
+    FrameHessian* fh = new FrameHessian();         /// 2. save current(new) frame image data in FrameHessian
+    FrameShell* shell = new FrameShell();          /// 3. save frame pose message in FrameShell
+    shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
+    shell->aff_g2l = AffLight(0,0);
+    shell->marginalizedAt = shell->id = allFrameHistory.size();
+    shell->timestamp = image->timestamp;
+    shell->incoming_id = id;
+    fh->shell = shell;
+    allFrameHistory.push_back(shell);
+
+
+    // =========================== make Images / derivatives etc. =========================
+    fh->ab_exposure = image->exposure_time;
+    fh->makeImages(image->image, &Hcalib);       /// 4. load photometric calibration to calibrate raw image( including image pyramid and caculate image derivatives)
+
+
+
+
+    if(!initialized)                             /// 5. initalization process
+    {
+        // use initializer!
+        if(coarseInitializer->frameID<0)	// first frame set. fh is kept by coarseInitializer.
+        {
+
+            coarseInitializer->setFirst(&Hcalib, fh);  /// 6. if it is first frame =>choose points to do eipipoler line search in second frame
+        }
+        else if(coarseInitializer->trackFrame(fh, outputWrapper))	// if SNAPPED  /// 7. if it's second frame => match all points in first frame
+        {
+
+            initializeFromInitializer(fh);    /// 8. set 2000 points in fistFrame to newFrame(second frame)
+            lock.unlock();
+            deliverTrackedFrame(fh, true);    /// 9. make second frame KF
+        }
+        else
+        {
+            // if still initializing
+            fh->shell->poseValid = false;
+            delete fh;
+        }
+        return;
+    }
+    else	// do front-end operation.            /// 10.for frame after 3 =>do front-end operation
+    {
+        // =========================== SWAP tracking reference?. =========================
+        if(coarseTracker_forNewKF->refFrameID > coarseTracker->refFrameID)
+        {
+            boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
+            CoarseTracker* tmp = coarseTracker; coarseTracker=coarseTracker_forNewKF; coarseTracker_forNewKF=tmp;
+        }
+
+
+        Vec4 tres = trackNewCoarse(fh);       /// 11. trace frame(just like the paper says) [frame2lastKF visual odometry]
+        if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
+        {
+            printf("Initial Tracking failed: LOST!\n");
+            isLost=true;
+            return;
+        }
+
+        bool needToMakeKF = false;
+        if(setting_keyframesPerSecond > 0)
+        {
+            needToMakeKF = allFrameHistory.size()== 1 ||
+                    (fh->shell->timestamp - allKeyFramesHistory.back()->timestamp) > 0.95f/setting_keyframesPerSecond;
+        }
+        else
+        {
+            Vec2 refToFh=AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
+                    coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
+
+            // BRIGHTNESS CHECK
+            needToMakeKF = allFrameHistory.size()== 1 ||         /// 12. make KF or not (same as paper Keyframe Creation)
+                    setting_kfGlobalWeight*setting_maxShiftWeightT *  sqrtf((double)tres[1]) / (wG[0]+hG[0]) +
+                    setting_kfGlobalWeight*setting_maxShiftWeightR *  sqrtf((double)tres[2]) / (wG[0]+hG[0]) +
+                    setting_kfGlobalWeight*setting_maxShiftWeightRT * sqrtf((double)tres[3]) / (wG[0]+hG[0]) +
+                    setting_kfGlobalWeight*setting_maxAffineWeight * fabs(logf((float)refToFh[0])) > 1 ||
+                    2*coarseTracker->firstCoarseRMSE < tres[0];
+
+        }
+
+
+
+
+        for(IOWrap::Output3DWrapper* ow : outputWrapper)
+            ow->publishCamPose(fh->shell, &Hcalib);
+
+
+
+
+        lock.unlock();
+        deliverTrackedFrame(fh, needToMakeKF);   /// *** 13. the bridge betwwen front-end and back-end, it pass key or notKey frame.
+        return;
+    }
+}
+
+void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id)
+{
+
+    if(isLost) return;
+
 	boost::unique_lock<boost::mutex> lock(trackMutex);
 
 
@@ -826,6 +923,7 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
     shell->incoming_id = id;
 	fh->shell = shell;
 	allFrameHistory.push_back(shell);
+
 #if TRACE_CODE_MODE
   std::cout << "============= add into allFrameHistory ============ " << "\n"
             <<"shell->incoming_id " << shell->incoming_id << "\t"
@@ -838,33 +936,17 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
     fh->makeImages(image->image, &Hcalib);
 
 
-
-
 	if(!initialized)
 	{
-		// use initializer!
-		if(coarseInitializer->frameID<0)	// first frame set. fh is kept by coarseInitializer.
+        // initalize directly!
+        if(coarseInitializer->frameID < 0)	// first frame set. fh is kept by coarseInitializer.
 		{
 
-			coarseInitializer->setFirst(&Hcalib, fh);
+            coarseInitializer->setFirstRGBD(&Hcalib, fh, depth_image);
+            return;
+            initialized = true;
 		}
-		else if(coarseInitializer->trackFrame(fh, outputWrapper))	// if SNAPPED
-		{
-#if TRACE_CODE_MODE
-  std::cout << "snapped!" << "\t"
-            <<"shell->incoming_id " << shell->incoming_id << "\t"
-            <<"fh->frameID " << fh->frameID << std::endl;
-#endif
-			initializeFromInitializer(fh);
-			lock.unlock();
-			deliverTrackedFrame(fh, true);
-		}
-		else
-		{
-			// if still initializing
-			fh->shell->poseValid = false;
-			delete fh;
-		}
+
 		return;
 	}
 	else	// do front-end operation.
@@ -873,7 +955,9 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 		if(coarseTracker_forNewKF->refFrameID > coarseTracker->refFrameID)
 		{
 			boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
-			CoarseTracker* tmp = coarseTracker; coarseTracker=coarseTracker_forNewKF; coarseTracker_forNewKF=tmp;
+            CoarseTracker* tmp = coarseTracker;
+            coarseTracker=coarseTracker_forNewKF;
+            coarseTracker_forNewKF=tmp;
 		}
 
 

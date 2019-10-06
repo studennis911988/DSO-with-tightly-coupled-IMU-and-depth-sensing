@@ -27,6 +27,7 @@
 #include "util/NumType.h"
 #include "OptimizationBackend/MatrixAccumulators.h"
 #include "IOWrapper/Output3DWrapper.h"
+#include "util/ImageAndExposure.h"
 #include "util/settings.h"
 #include "vector"
 #include <math.h>
@@ -82,8 +83,8 @@ public:
 	CoarseInitializer(int w, int h);
 	~CoarseInitializer();
 
-
-	void setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHessian);
+    void setFirstRGBD(CalibHessian* HCalib, FrameHessian* newFrameHessian, MinimalImageB16* depth_img);
+    void setFirst(CalibHessian* HCalib, FrameHessian* newFrameHessian);
 	bool trackFrame(FrameHessian* newFrameHessian, std::vector<IOWrap::Output3DWrapper*> &wraps);
 	void calcTGrads(FrameHessian* newFrameHessian);
 

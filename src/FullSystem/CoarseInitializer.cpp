@@ -35,6 +35,7 @@
 #include "FullSystem/Residuals.h"
 #include "FullSystem/PixelSelector.h"
 #include "FullSystem/PixelSelector2.h"
+#include "FullSystem/ImmaturePoint.h"
 #include "util/nanoflann.h"
 
 
@@ -771,6 +772,155 @@ void CoarseInitializer::makeGradients(Eigen::Vector3f** data)
 			dINew_l[idx][2] = 0.5f*(dINew_l[idx+wl][0] - dINew_l[idx-wl][0]);
 		}
 	}
+}
+
+/**
+ * @brief set first frame for RGBD DSO ,we choose the pointHessian with known depth provide by depth image
+ * @param HCalib
+ * @param newFrameHessian
+ * @param depth_img
+ */
+void CoarseInitializer::setFirstRGBD(CalibHessian* HCalib, FrameHessian* newFrameHessian, MinimalImageB16* depth_img)
+{
+#if TRACE_CODE_MODE
+  std::cout << "setFirst" << std::endl;
+#endif
+    makeK(HCalib);
+    firstFrame = newFrameHessian;
+
+    PixelSelector sel(w[0],h[0]);
+#if TRACE_CODE_MODE
+  std::cout << "PixelSelector" << "\t "
+            << "w[0]" <<w[0] << std::endl;
+#endif
+    float* statusMap = new float[w[0]*h[0]];
+    bool* statusMapB = new bool[w[0]*h[0]];
+
+    float densities[] = {0.03,0.05,0.15,0.5,1};
+    for(int lvl=0; lvl<pyrLevelsUsed; lvl++)
+    {
+        sel.currentPotential = 3;
+        int npts;
+        if(lvl == 0){
+            npts = sel.makeMaps(firstFrame, statusMap,densities[lvl]*w[0]*h[0],1,false,2);
+        }
+        else{
+            npts = makePixelStatus(firstFrame->dIp[lvl], statusMapB, w[lvl], h[lvl], densities[lvl]*w[0]*h[0]);
+        }
+
+
+#if TRACE_CODE_MODE
+  std::cout << "makePixelStatus" << "\t "
+            << "pyrLevelsUsed" <<lvl << "\t "
+               << "npts " << npts << std::endl;
+#endif
+        if(points[lvl] != 0) delete[] points[lvl];
+        points[lvl] = new Pnt[npts];
+
+        // set idepth map from depth_img
+        int wl = w[lvl], hl = h[lvl];
+        Pnt* pl = points[lvl];
+        int nl = 0;
+        for(int y=patternPadding+1;y<hl-patternPadding-2;y++)
+        for(int x=patternPadding+1;x<wl-patternPadding-2;x++)
+        {
+            if(lvl==0 && statusMap[x+y*wl] != 0){
+                ImmaturePoint* pt = new ImmaturePoint(x, y, firstFrame, statusMap[x+y*wl], HCalib);
+                // get pt depth
+                ImmaturePointStatus pt_status = pt->traceRGBD(depth_img, y, x);
+
+                if(pt_status == ImmaturePointStatus::IPS_GOOD){
+                    pl[nl].u = x;
+                    pl[nl].v = y;
+
+                    pl[nl].idepth = pt->idepth_rgbd;
+
+                    pl[nl].isGood=true;
+                    pl[nl].energy.setZero();
+                    pl[nl].lastHessian=0;
+                    pl[nl].lastHessian_new=0;
+                    pl[nl].my_type= (lvl!=0) ? 1 : statusMap[x+y*wl];
+
+                    Eigen::Vector3f* cpt = firstFrame->dIp[lvl] + x + y*w[lvl];
+                    float sumGrad2=0;
+                    for(int idx=0;idx<patternNum;idx++)
+                    {
+                        int dx = patternP[idx][0];
+                        int dy = patternP[idx][1];
+                        float absgrad = cpt[dx + dy*w[lvl]].tail<2>().squaredNorm();
+                        sumGrad2 += absgrad;
+                    }
+
+                    pl[nl].outlierTH = patternNum*setting_outlierTH;
+
+                    nl++;
+                    assert(nl <= npts);
+
+                }
+                else{ /* TODO for 0 depth pixels */
+
+                }
+                // delete immuature point
+                delete pt;
+            }
+
+            if(lvl!=0 && statusMapB[x+y*wl]) /* why choose point on coarse level ? */
+            {
+                pl[nl].u = x+0.1;
+                pl[nl].v = y+0.1;
+                pl[nl].idepth = 1;
+                pl[nl].iR = 1;
+                pl[nl].isGood=true;
+                pl[nl].energy.setZero();
+                pl[nl].lastHessian=0;
+                pl[nl].lastHessian_new=0;
+                pl[nl].my_type= (lvl!=0) ? 1 : statusMap[x+y*wl];
+#if TRACE_CODE_MODE
+//  std::cout << "set idepth map to initially 1 everywhere." << "\t "
+//            << "y" <<y<< "\t "
+//               << "x" <<x<< "\t "
+//               << "nl " <<nl << "\t "
+//               << "pl[nl].idepth" <<pl[nl].idepth << "\t "
+//               << std::endl;
+#endif
+                Eigen::Vector3f* cpt = firstFrame->dIp[lvl] + x + y*w[lvl];
+                float sumGrad2=0;
+                for(int idx=0;idx<patternNum;idx++)
+                {
+                    int dx = patternP[idx][0];
+                    int dy = patternP[idx][1];
+                    float absgrad = cpt[dx + dy*w[lvl]].tail<2>().squaredNorm();
+                    sumGrad2 += absgrad;
+                }
+
+                pl[nl].outlierTH = patternNum*setting_outlierTH;
+
+                nl++;
+                assert(nl <= npts);
+            }
+        }
+
+
+        numPoints[lvl]=nl;
+        std::cout << "num of points is avaliable for initalization =>" << numPoints[0];
+#if TRACE_CODE_MODE
+  std::cout << "numPoints[lvl]" << "\t "
+            << "numPoints[lvl] " <<numPoints[lvl]<< "\t "
+               << "lvl" <<lvl << std::endl;
+#endif
+    }
+    delete[] statusMap;
+    delete[] statusMapB;
+
+    makeNN();
+
+    thisToNext=SE3();
+    snapped = false;
+    frameID = snappedAt = 0;
+
+    for(int i=0;i<pyrLevelsUsed;i++)
+        dGrads[i].setZero();
+
 }
 void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHessian)
 {
