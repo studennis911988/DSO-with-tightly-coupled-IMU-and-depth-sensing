@@ -26,6 +26,8 @@
 #include "util/globalCalib.h"
 #include "stdio.h"
 #include <iostream>
+#include <sstream>
+#include <fstream>
 #include "trace_code.h"
 namespace dso
 {
@@ -41,6 +43,10 @@ namespace dso
 
 	float wM3G;
 	float hM3G;
+
+    //
+    Eigen::Matrix3d rgbPixel2depthPixel_rotation;
+    Eigen::Vector3d rgbPixel2depthPixel_translation;
 
 	void setGlobalCalib(int w, int h,const Eigen::Matrix3f &K)
 	{
@@ -110,6 +116,44 @@ namespace dso
 #endif
 		}
 	}
+
+    void setRGB2DepthSE3FormFile(std::string RGB2DepthSE3name){
+
+        printf("Reading RGB to Depth SE3 from file %s", RGB2DepthSE3name.c_str());
+
+        std::ifstream f(RGB2DepthSE3name.c_str());
+        if (!f.good())
+        {
+            f.close();
+            printf(" ... not found. Cannot operate without RGB to Depth SE3, shutting down.\n");
+            f.close();
+            return ;
+        }
+
+        printf(" ... found!\n");
+        std::string l1;
+        std::getline(f,l1);
+        f.close();
+
+        float param[12];
+
+        if(std::sscanf(l1.c_str(), "%f %f %f %f %f %f %f %f %f %f %f %f",
+           &param[0], &param[1], &param[2], &param[3], &param[4], &param[5], &param[6], &param[7], &param[8],
+           &param[9], &param[10], &param[11]) == 12)
+        {
+            printf("found RGB to Depth SE3, building Matrixs.\n");
+            rgbPixel2depthPixel_rotation << param[0], param[1], param[2],
+                                            param[3], param[4], param[5],
+                                            param[6], param[7] , param[8];
+            rgbPixel2depthPixel_translation << param[9], param[10], param[11];
+
+            std::cout << "rgbPixel2depthPixel_rotation" << "\n" << rgbPixel2depthPixel_rotation << "\n";
+            std::cout << "rgbPixel2depthPixel_translation" << "\n" << rgbPixel2depthPixel_translation << "\n";
+
+        }
+    }
+
+
 
 
 }

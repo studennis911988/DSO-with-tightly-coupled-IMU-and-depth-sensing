@@ -26,11 +26,12 @@
 #include "FullSystem/ImmaturePoint.h"
 #include "util/FrameShell.h"
 #include "FullSystem/ResidualProjections.h"
+#include "util/globalCalib.h"
 
 namespace dso
 {
 ImmaturePoint::ImmaturePoint(int u_, int v_, FrameHessian* host_, float type, CalibHessian* HCalib)
-: u(u_), v(v_), host(host_), my_type(type), idepth_min(0), idepth_max(NAN), lastTraceStatus(IPS_UNINITIALIZED)
+: u(u_), v(v_), host(host_), my_type(type), idepth_min(0), idepth_max(NAN), idepth_rgbd(NAN),lastTraceStatus(IPS_UNINITIALIZED)
 {
 
 	gradH.setZero();
@@ -71,13 +72,13 @@ ImmaturePoint::~ImmaturePoint()
  * @param col
  * @return ImmuatuePoints Status & depth in meters
  */
-ImmaturePointStatus ImmaturePoint::traceRGBD(MinimalImageB16* depth_img, int row, int col){
+ImmaturePointStatus ImmaturePoint::traceRGBD(MinimalImageB16* depth_img, int col, int row){
     float scaleS = 0.001; // mm -> meters
 
     Eigen::Vector2d pixel(col, row);
 
     float depth = (float)rgbGetDepthValue(pixel, depth_img) * scaleS;
-    std::cout << "(" << col << "," << row <<") depth=>" << depth << "\n";
+//    std::cout << "(" << col << "," << row <<") depth=>" << depth << "\n";
 
     // if the there is depth value in that pixel
     if(depth != 0){
@@ -85,7 +86,7 @@ ImmaturePointStatus ImmaturePoint::traceRGBD(MinimalImageB16* depth_img, int row
         return lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
     }
     else{
-        idepth_rgbd = 0; /* TODO*/
+//        idepth_rgbd = 0; /* TODO*/
         return lastTraceStatus = ImmaturePointStatus::IPS_UNINITIALIZED;
     }
 }
@@ -119,25 +120,9 @@ bool ImmaturePoint::OutOfDepthImg(MinimalImageB16* depth_img_to_check,  Eigen::V
 }
 
 unsigned short ImmaturePoint::rgbGetDepthValue(const Eigen::Vector2d pixel, MinimalImageB16* depth_img){
-    Eigen::Matrix3d rgb_intrinsic;
-    rgb_intrinsic << 611.8820190429688, 0.0, 313.431396484375,
-                     0.0, 612.0963134765625, 236.08074951171875,
-                     0.0, 0.0, 1.0;
-    Eigen::Matrix3d depth_intrinsic;
-    depth_intrinsic << 385.2818298339844, 0.0, 321.9030456542969,
-                       0.0, 385.2818298339844, 240.35650634765625,
-                       0.0, 0.0, 1.0;
-    Eigen::Matrix3d R_rgb2depth;
-    R_rgb2depth <<   0.999968, -0.00410059, 0.00686024,
-                     0.00410279, 0.999992, -0.00030674,
-                    -0.00685893, 0.000334876, 0.999976;
-    Eigen::Vector3d t_rgb2depth;
-    t_rgb2depth << -0.014751243405044079, -9.93324865703471e-05, -0.0003203923988621682;
 
-
-    // rgb_pixel to rgb_camera frame
-    Eigen::Vector3d rgb_camera_frame = rgb_intrinsic.inverse() * Eigen::Vector3d(pixel[0], pixel[1], 1);
-    Eigen::Vector3d depth_pixel_frame = depth_intrinsic * (R_rgb2depth * rgb_camera_frame + t_rgb2depth);
+    Eigen::Vector3d depth_pixel_frame = rgbPixel2depthPixel_rotation * Eigen::Vector3d(pixel[0], pixel[1], 1)
+                                      + rgbPixel2depthPixel_translation;
 
     int depth_img_pixel_num = (int)depth_pixel_frame[1] * depth_img->w + depth_pixel_frame[0];
     unsigned short depth = depth_img->data[depth_img_pixel_num];

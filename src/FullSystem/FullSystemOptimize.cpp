@@ -42,6 +42,8 @@
 
 #include <algorithm>
 
+#include "trace_code.h"
+
 namespace dso
 {
 
@@ -407,7 +409,9 @@ void FullSystem::printOptRes(const Vec3 &res, double resL, double resM, double r
 
 float FullSystem::optimize(int mnumOptIts)
 {
-
+#if TRACE_CODE_MODE
+  std::cout << "optimize frameHessians.size() =>" << frameHessians.size()  << std::endl;
+#endif
 	if(frameHessians.size() < 2) return 0;
 	if(frameHessians.size() < 3) mnumOptIts = 20;
 	if(frameHessians.size() < 4) mnumOptIts = 15;
@@ -455,7 +459,9 @@ float FullSystem::optimize(int mnumOptIts)
 	else
 		applyRes_Reductor(true,0,activeResiduals.size(),0,0);
 
-
+#if TRACE_CODE_MODE
+  std::cout << "treadReduce.reduce" << std::endl;
+#endif
     if(!setting_debugout_runquiet)
     {
         printf("Initial Error       \t");

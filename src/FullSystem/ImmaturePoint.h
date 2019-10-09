@@ -76,13 +76,14 @@ public:
 
 	float my_type;
 
-	float idepth_min;
+    float idepth_min;  // depth from epipolar line search
 	float idepth_max;
+
     float idepth_rgbd; // depth from depth image
 	ImmaturePoint(int u_, int v_, FrameHessian* host_, float type, CalibHessian* HCalib);
 	~ImmaturePoint();
 
-    ImmaturePointStatus traceRGBD(MinimalImageB16* depth_img, int row, int col);
+    ImmaturePointStatus traceRGBD(MinimalImageB16* depth_img, int col, int row);
 	ImmaturePointStatus traceOn(FrameHessian* frame, const Mat33f &hostToFrame_KRKi, const Vec3f &hostToFrame_Kt, const Vec2f &hostToFrame_affine, CalibHessian* HCalib, bool debugPrint=false);
 
     bool OutOfDepthImg(MinimalImageB16* depth_img_to_check,  Eigen::Vector3d pixel_to_check);

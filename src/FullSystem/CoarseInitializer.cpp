@@ -827,7 +827,7 @@ void CoarseInitializer::setFirstRGBD(CalibHessian* HCalib, FrameHessian* newFram
             if(lvl==0 && statusMap[x+y*wl] != 0){
                 ImmaturePoint* pt = new ImmaturePoint(x, y, firstFrame, statusMap[x+y*wl], HCalib);
                 // get pt depth
-                ImmaturePointStatus pt_status = pt->traceRGBD(depth_img, y, x);
+                ImmaturePointStatus pt_status = pt->traceRGBD(depth_img, x, y);
 
                 if(pt_status == ImmaturePointStatus::IPS_GOOD){
                     pl[nl].u = x;
@@ -902,20 +902,21 @@ void CoarseInitializer::setFirstRGBD(CalibHessian* HCalib, FrameHessian* newFram
 
 
         numPoints[lvl]=nl;
-        std::cout << "num of points is avaliable for initalization =>" << numPoints[0];
+
 #if TRACE_CODE_MODE
   std::cout << "numPoints[lvl]" << "\t "
             << "numPoints[lvl] " <<numPoints[lvl]<< "\t "
                << "lvl" <<lvl << std::endl;
 #endif
     }
+     std::cout << "num of points is avaliable for initalization =>" << numPoints[0];
     delete[] statusMap;
     delete[] statusMapB;
 
     makeNN();
 
     thisToNext=SE3();
-    snapped = false;
+//    snapped = false;
     frameID = snappedAt = 0;
 
     for(int i=0;i<pyrLevelsUsed;i++)

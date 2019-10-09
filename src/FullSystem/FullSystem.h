@@ -177,6 +177,7 @@ private:
 	double linAllPointSinle(PointHessian* point, float outlierTHSlack, bool plot);
 
 	// mainPipelineFunctions
+    Vec4 trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image);
 	Vec4 trackNewCoarse(FrameHessian* fh);
 	void traceNewCoarse(FrameHessian* fh);
 	void activatePoints();
@@ -184,6 +185,7 @@ private:
 	void activatePointsOldFirst();
 	void flagPointsForRemoval();
 	void makeNewTraces(FrameHessian* newFrame, float* gtDepth);
+    void initializeFromSecondFrame(FrameHessian* secondFrame, MinimalImageB16* depth_img);
 	void initializeFromInitializer(FrameHessian* newFrame);
 	void flagFramesForMarginalization(FrameHessian* newFH);
 
