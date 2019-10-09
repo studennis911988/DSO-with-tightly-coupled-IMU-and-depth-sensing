@@ -473,6 +473,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
         ow->pushLiveFrame(fh);
     }
 
+
 #if TRACE_CODE_MODE
   std::cout << "trackNewCoarse" << "\t"
                <<"fh->shell->id  " << fh->shell->id << std::endl;
@@ -520,12 +521,11 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
         }
 
         /// set tracking reference for second frame(id = 1)
-        std::cout <<  "makeK(";
+        /// std::cout <<  "lastF" <<  lastF->shell->id;
         coarseTracker->makeK(&Hcalib);
-        std::cout <<  "setCoarseTrackingRefForSecondFrame";
         coarseTracker->setCoarseTrackingRefForSecondFrame(frameHessians);
         lastF = coarseTracker->lastRef;
-        std::cout <<  "lastF" <<  lastF->shell->id << "\n";
+        std::cout <<  "lastF" <<  lastF->shell->id;
     }
 
 
@@ -801,9 +801,7 @@ void FullSystem::activatePointsMT()
                 currentMinActDist, (int)(setting_desiredPointDensity), ef->nPoints);
 
 
-#if TRACE_CODE_MODE
-  std::cout << "SPARSITY" << std::endl;
-#endif
+
 	FrameHessian* newestHs = frameHessians.back();
 
 	// make dist map.
@@ -926,9 +924,7 @@ void FullSystem::activatePointsMT()
 			assert(newpoint == 0 || newpoint == (PointHessian*)((long)(-1)));
 		}
 	}
-#if TRACE_CODE_MODE
-  std::cout << "SPARSITY2" << std::endl;
-#endif
+
 
 	for(FrameHessian* host : frameHessians)
 	{
@@ -1163,7 +1159,6 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 
 	boost::unique_lock<boost::mutex> lock(trackMutex);
 
-
     // =========================== add into allFrameHistory =========================
 	FrameHessian* fh = new FrameHessian();
 	FrameShell* shell = new FrameShell();
@@ -1172,8 +1167,11 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
     shell->marginalizedAt = shell->id = allFrameHistory.size();
     shell->timestamp = image->timestamp;
     shell->incoming_id = id;
-	fh->shell = shell;
+    fh->shell = shell;
 	allFrameHistory.push_back(shell);
+
+    // depth image
+    current_frame_depth_img = depth_image;
 
 #if TRACE_CODE_MODE
   std::cout << "============= add into allFrameHistory ============ " << "\n"
@@ -1194,6 +1192,7 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 		{
 
             coarseInitializer->setFirstRGBD(&Hcalib, fh, depth_image);
+//            return;
             initialized = true;
 		}
 
@@ -1211,7 +1210,6 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 		}
 
         Vec4 tres = trackNewCoarse(fh, depth_image);
-
 		if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
         {
             printf("Initial Tracking failed: LOST!\n");
@@ -1241,8 +1239,13 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 		}
 
 
+
+
         for(IOWrap::Output3DWrapper* ow : outputWrapper)
             ow->publishCamPose(fh->shell, &Hcalib);
+
+
+
 
 		lock.unlock();
 		deliverTrackedFrame(fh, needToMakeKF);
@@ -1254,6 +1257,8 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 }
 void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
 {
+
+
     if(linearizeOperation)
 	{
 		if(goStepByStep && lastRefStopID != coarseTracker->refFrameID)
@@ -1271,17 +1276,16 @@ void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
 		else handleKey( IOWrap::waitKey(1) );
 
 
-		if(needKF) makeKeyFrame(fh);
-		else makeNonKeyFrame(fh);
-	}
-	else
-	{
-
 #if TRACE_CODE_MODE
   std::cout << "deliverTrackedFrame" << "\t"
                <<"fh->shell->id " << fh->shell->id << "\t"
             <<"needKF " << needKF << std::endl;
 #endif
+        if(needKF) makeKeyFrame(fh);
+		else makeNonKeyFrame(fh);
+	}
+	else
+    {
 		boost::unique_lock<boost::mutex> lock(trackMapSyncMutex);
 		unmappedTrackedFrames.push_back(fh);
 		if(needKF) needNewKFAfter=fh->shell->trackingRef->id;
@@ -1307,9 +1311,7 @@ void FullSystem::mappingLoop()
 			trackedFrameSignal.wait(lock);
 			if(!runMapping) return;
 		}
-#if TRACE_CODE_MODE
-  std::cout << "mappingLoop" << std::endl;
-#endif
+
 		FrameHessian* fh = unmappedTrackedFrames.front();
 		unmappedTrackedFrames.pop_front();
 
@@ -1318,7 +1320,7 @@ void FullSystem::mappingLoop()
 		if(allKeyFramesHistory.size() <= 2)
 		{
 			lock.unlock();
-			makeKeyFrame(fh);
+            makeKeyFrame(fh);
 			lock.lock();
 			mappedFrameSignal.notify_all();
 			continue;
@@ -1380,12 +1382,8 @@ void FullSystem::blockUntilMappingIsFinished()
 
 }
 
-void FullSystem::makeNonKeyFrame( FrameHessian* fh)
+void FullSystem::makeNonKeyFrame(FrameHessian* fh)
 {
-#if TRACE_CODE_MODE
-  std::cout << "makeNonKeyFrame" << "\t"
-               <<"fh->shell->id " << fh->shell->id << std::endl;
-#endif
 	// needs to be set by mapping thread. no lock required since we are in mapping thread.
 	{
 		boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
@@ -1393,20 +1391,13 @@ void FullSystem::makeNonKeyFrame( FrameHessian* fh)
 		fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
 		fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(),fh->shell->aff_g2l);
 	}
-#if TRACE_CODE_MODE
-  std::cout << "traceNewCoarse" << "\t"
-               <<"fh->shell->id " << fh->shell->id << std::endl;
-#endif
+
 	traceNewCoarse(fh);
 	delete fh;
 }
 
-void FullSystem::makeKeyFrame( FrameHessian* fh)
+void FullSystem::makeKeyFrame(FrameHessian* fh)
 {
-#if TRACE_CODE_MODE
-  std::cout << "makeKeyFrame" << "\t"
-               <<"fh->shell->id " << fh->shell->id << std::endl;
-#endif
 	// needs to be set by mapping thread
 	{
 		boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
@@ -1416,16 +1407,12 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 	}
 
 	traceNewCoarse(fh);
-#if TRACE_CODE_MODE
-  std::cout << "traceNewCoarse" << std::endl;
-#endif
+
 	boost::unique_lock<boost::mutex> lock(mapMutex);
 
 	// =========================== Flag Frames to be Marginalized. =========================
 	flagFramesForMarginalization(fh);
-#if TRACE_CODE_MODE
-  std::cout << "flagFramesForMarginalization" << std::endl;
-#endif
+
 
 	// =========================== add New Frame to Hessian Struct. =========================
 	fh->idx = frameHessians.size();
@@ -1436,9 +1423,7 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 
 	setPrecalcValues();
 
-#if TRACE_CODE_MODE
-  std::cout << "setPrecalcValues" << std::endl;
-#endif
+
 
 	// =========================== add new residuals for old points =========================
 	int numFwdResAdde=0;
@@ -1456,33 +1441,16 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 			numFwdResAdde+=1;
 		}
 	}
-#if TRACE_CODE_MODE
-  std::cout << "add new residuals for old points" << std::endl;
-#endif
-
-
 
 
 	// =========================== Activate Points (& flag for marginalization). =========================
 	activatePointsMT();
 	ef->makeIDX();
 
-#if TRACE_CODE_MODE
-  std::cout << "activatePointsMT" << std::endl;
-#endif
-
-
 
 	// =========================== OPTIMIZE ALL =========================
-
 	fh->frameEnergyTH = frameHessians.back()->frameEnergyTH;
 	float rmse = optimize(setting_maxOptIterations);
-
-
-
-#if TRACE_CODE_MODE
-  std::cout << "optimize" << std::endl;
-#endif
 
 
 	// =========================== Figure Out if INITIALIZATION FAILED =========================
@@ -1505,28 +1473,16 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 		}
 	}
 
-
-
     if(isLost) return;
-
-
 
 
 	// =========================== REMOVE OUTLIER =========================
 	removeOutliers();
 
-#if TRACE_CODE_MODE
-  std::cout << "removeOutliers" << std::endl;
-#endif
-
-
-
 	{
 		boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
 		coarseTracker_forNewKF->makeK(&Hcalib);
 		coarseTracker_forNewKF->setCoarseTrackingRef(frameHessians);
-
-
 
         coarseTracker_forNewKF->debugPlotIDepthMap(&minIdJetVisTracker, &maxIdJetVisTracker, outputWrapper);
         coarseTracker_forNewKF->debugPlotIDepthMapFloat(outputWrapper);
@@ -1534,10 +1490,6 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 
 
 	debugPlot("post Optimize");
-
-
-
-
 
 
 	// =========================== (Activate-)Marginalize Points =========================
@@ -1551,16 +1503,11 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
 	ef->marginalizePointsF();
 
 
-
 	// =========================== add new Immature points & new residuals =========================
 	makeNewTraces(fh, 0);
 
-#if TRACE_CODE_MODE
-  std::cout << "makeNewTraces" << std::endl;
-#endif
-
-
-
+    // trace new immature points by depth camera
+    rgbdMatch(fh, current_frame_depth_img);
 
 
     for(IOWrap::Output3DWrapper* ow : outputWrapper)
@@ -1569,21 +1516,26 @@ void FullSystem::makeKeyFrame( FrameHessian* fh)
         ow->publishKeyframes(frameHessians, false, &Hcalib);
     }
 
-
-
 	// =========================== Marginalize Frames =========================
 
 	for(unsigned int i=0;i<frameHessians.size();i++)
 		if(frameHessians[i]->flaggedForMarginalization)
 			{marginalizeFrame(frameHessians[i]); i=0;}
 
-
-
 	printLogLine();
     //printEigenValLine();
-
 }
 
+// get depth for new immuture points
+void FullSystem::rgbdMatch(FrameHessian *frame, MinimalImageB16 *depth_image){
+    for(ImmaturePoint* ipt : frame->immaturePoints){
+        // trace by RGBD
+        ImmaturePointStatus iptStaus = ipt->traceRGBD(depth_image, ipt->u, ipt->v);
+        if(iptStaus == ImmaturePointStatus::IPS_GOOD){
+            ipt->idepth_min = ipt->idepth_max = ipt->idepth_rgbd;
+        }
+    }
+}
 
 void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalImageB16* depth_img)
 {
@@ -1609,7 +1561,7 @@ void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalIma
            <<"firstFrame->pointHessians " << firstFrame->pointHessians.size() << std::endl;
 #endif
     // randomly sub-select the points I need.
-    float keepPercentage = setting_desiredPointDensity / coarseInitializer->numPoints[0];
+    float keepPercentage = setting_desiredPointDensity / coarseInitializer->numPoints[0] + 0.1;
 
     if(!setting_debugout_runquiet)
         printf("Initialization: keep %.1f%% (need %d, have %d)!\n", 100*keepPercentage,

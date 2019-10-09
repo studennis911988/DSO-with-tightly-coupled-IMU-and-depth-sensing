@@ -139,6 +139,7 @@ public:
     void addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
     void addActiveFrame(ImageAndExposure* image, int id);
 
+    void rgbdMatch(FrameHessian* frame, MinimalImageB16* depth_image);
 	// marginalizes a frame. drops / marginalizes points & residuals.
 	void marginalizeFrame(FrameHessian* frame);
 	void blockUntilMappingIsFinished();
@@ -166,6 +167,8 @@ public:
 private:
 
 	CalibHessian Hcalib;
+
+    MinimalImageB16* current_frame_depth_img;
 
 
 
@@ -302,9 +305,9 @@ private:
  *
  */
 
-	void makeKeyFrame( FrameHessian* fh);
+    void makeKeyFrame( FrameHessian* fh);
 	void makeNonKeyFrame( FrameHessian* fh);
-	void deliverTrackedFrame(FrameHessian* fh, bool needKF);
+    void deliverTrackedFrame(FrameHessian* fh, bool needKF);
 	void mappingLoop();
 
 	// tracking / mapping synchronization. All protected by [trackMapSyncMutex].
