@@ -56,6 +56,8 @@
 
 #include <cmath>
 
+#include <chrono>
+
 namespace dso
 {
 int FrameHessian::instanceCounter=0;
@@ -525,7 +527,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
         coarseTracker->makeK(&Hcalib);
         coarseTracker->setCoarseTrackingRefForSecondFrame(frameHessians);
         lastF = coarseTracker->lastRef;
-        std::cout <<  "lastF" <<  lastF->shell->id;
+        std::cout <<  "lastF id => " <<  lastF->shell->id;
     }
 
 
@@ -702,10 +704,6 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
                         << tryIterations << "\n";
     }
 
-#if TRACE_CODE_MODE
-  std::cout << "end  front end" << "\t"
-               <<"fh->shell->id  " << fh->shell->id << std::endl;
-#endif
     return Vec4(achievedRes[0], flowVecs[0], flowVecs[1], flowVecs[2]);
 }
 
@@ -722,6 +720,7 @@ void FullSystem::traceNewCoarse(FrameHessian* fh)
 	K(0,2) = Hcalib.cxl();
 	K(1,2) = Hcalib.cyl();
 
+//    std::chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
 	for(FrameHessian* host : frameHessians)		// go through all active frames
 	{
 
@@ -733,6 +732,11 @@ void FullSystem::traceNewCoarse(FrameHessian* fh)
 
 		for(ImmaturePoint* ph : host->immaturePoints)
 		{
+            /// skip the point with depth from camera
+            if(ph->hasDepthFromDepthCam){
+//                ph->lastTraceStatus = ImmaturePointStatus::IPS_SKIPPED;
+                continue;
+            }
 			ph->traceOn(fh, KRKi, Kt, aff, &Hcalib, false );
 
 			if(ph->lastTraceStatus==ImmaturePointStatus::IPS_GOOD) trace_good++;
@@ -744,14 +748,16 @@ void FullSystem::traceNewCoarse(FrameHessian* fh)
 			trace_total++;
 		}
 	}
-//	printf("ADD: TRACE: %'d points. %'d (%.0f%%) good. %'d (%.0f%%) skip. %'d (%.0f%%) badcond. %'d (%.0f%%) oob. %'d (%.0f%%) out. %'d (%.0f%%) uninit.\n",
-//			trace_total,
-//			trace_good, 100*trace_good/(float)trace_total,
-//			trace_skip, 100*trace_skip/(float)trace_total,
-//			trace_badcondition, 100*trace_badcondition/(float)trace_total,
-//			trace_oob, 100*trace_oob/(float)trace_total,
-//			trace_out, 100*trace_out/(float)trace_total,
-//			trace_uninitialized, 100*trace_uninitialized/(float)trace_total);
+//    chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+//    chrono::duration<double> time_used = chrono::duration_cast<chrono::duration<double>>( t2-t1 );
+//    printf("ADD: TRACE: %'d points. %'d (%.0f%%) good. %'d (%.0f%%) skip. %'d (%.0f%%) badcond. %'d (%.0f%%) oob. %'d (%.0f%%) out. %'d (%.0f%%) uninit.\n",
+//            trace_total,
+//            trace_good, 100*trace_good/(float)trace_total,
+//            trace_skip, 100*trace_skip/(float)trace_total,
+//            trace_badcondition, 100*trace_badcondition/(float)trace_total,
+//            trace_oob, 100*trace_oob/(float)trace_total,
+//            trace_out, 100*trace_out/(float)trace_total,
+//            trace_uninitialized, 100*trace_uninitialized/(float)trace_total);
 }
 
 
@@ -1172,13 +1178,6 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
     // depth image
     current_frame_depth_img = depth_image;
 
-#if TRACE_CODE_MODE
-  std::cout << "============= add into allFrameHistory ============ " << "\n"
-            <<"shell->incoming_id " << shell->incoming_id << "\t"
-            <<"shell->camToWorld " << "\n" << shell->camToWorld.matrix3x4()<< "\n"
-            <<"allFrameHistory.size() " << allFrameHistory.size() << "\t"          << std::endl;
-#endif
-
 	// =========================== make Images / derivatives etc. =========================
 	fh->ab_exposure = image->exposure_time;
     fh->makeImages(image->image, &Hcalib);
@@ -1189,9 +1188,7 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
         // initalize directly!
         if(coarseInitializer->frameID < 0)	// first frame set. fh is kept by coarseInitializer.
 		{
-
             coarseInitializer->setFirstRGBD(&Hcalib, fh, depth_image);
-//            return;
             initialized = true;
 		}
 
@@ -1209,6 +1206,7 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 		}
 
         Vec4 tres = trackNewCoarse(fh, depth_image);
+
 		if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
         {
             printf("Initial Tracking failed: LOST!\n");
@@ -1237,23 +1235,16 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 
 		}
 
-
-
-
         for(IOWrap::Output3DWrapper* ow : outputWrapper)
             ow->publishCamPose(fh->shell, &Hcalib);
 
-
-
-
 		lock.unlock();
 		deliverTrackedFrame(fh, needToMakeKF);
-#if TRACE_CODE_MODE
-  std::cout << "========== deliverTrackedFrame ===============" << std::endl;
-#endif
+
 		return;
 	}
 }
+
 void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
 {
 
@@ -1590,7 +1581,7 @@ void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalIma
         if(ptTraceRGBDstatus == ImmaturePointStatus::IPS_GOOD){
             /* TODO *  asign min/max even if there is depth from camera, since we may traceOn this points too, not sure*/
             ipt->idepth_min = ipt->idepth_max = ipt->idepth_rgbd;
-
+            ipt->hasDepthFromDepthCam = true;
             // if there is depth from depth camera, we add it to first frame's PointHessian
             PointHessian* ph = new PointHessian(ipt, &Hcalib);
             if(!std::isfinite(ph->energyTH)) {delete ph; continue;}

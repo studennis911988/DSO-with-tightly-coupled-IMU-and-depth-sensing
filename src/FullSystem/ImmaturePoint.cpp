@@ -31,7 +31,7 @@
 namespace dso
 {
 ImmaturePoint::ImmaturePoint(int u_, int v_, FrameHessian* host_, float type, CalibHessian* HCalib)
-: u(u_), v(v_), host(host_), my_type(type), idepth_min(0), idepth_max(NAN), idepth_rgbd(NAN),lastTraceStatus(IPS_UNINITIALIZED)
+: u(u_), v(v_), host(host_), my_type(type), idepth_min(0), idepth_max(NAN), idepth_rgbd(NAN), hasDepthFromDepthCam(false), lastTraceStatus(IPS_UNINITIALIZED)
 {
 
 	gradH.setZero();
@@ -83,6 +83,7 @@ ImmaturePointStatus ImmaturePoint::traceRGBD(MinimalImageB16* depth_img, int col
     // if the there is depth value in that pixel
     if(depth != 0){
         idepth_rgbd = 1 / depth;
+        hasDepthFromDepthCam = true;
         return lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
     }
     else{
@@ -150,7 +151,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 	if(lastTraceStatus == ImmaturePointStatus::IPS_OOB) return lastTraceStatus;
 
 
-	debugPrint = false;//rand()%100==0;
+    debugPrint = false;//rand()%100==0; //false
 	float maxPixSearch = (wG[0]+hG[0])*setting_maxPixSearch;
 
 	if(debugPrint)
@@ -160,12 +161,6 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 				idepth_min, idepth_max,
 				hostToFrame_Kt[0],hostToFrame_Kt[1],hostToFrame_Kt[2]);
 
-//	const float stepsize = 1.0;				// stepsize for initial discrete search.
-//	const int GNIterations = 3;				// max # GN iterations
-//	const float GNThreshold = 0.1;				// GN stop after this stepsize.
-//	const float extraSlackOnTH = 1.2;			// for energy-based outlier check, be slightly more relaxed by this factor.
-//	const float slackInterval = 0.8;			// if pixel-interval is smaller than this, leave it be.
-//	const float minImprovementFactor = 2;		// if pixel-interval is smaller than this, leave it be.
 	// ============== project min and max. return if one of them is OOB ===================
 	Vec3f pr = hostToFrame_KRKi * Vec3f(u,v, 1);
 	Vec3f ptpMin = pr + hostToFrame_Kt*idepth_min;

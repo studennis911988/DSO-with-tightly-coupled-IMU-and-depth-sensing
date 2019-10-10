@@ -80,6 +80,8 @@ public:
 	float idepth_max;
 
     float idepth_rgbd; // depth from depth image
+    bool  hasDepthFromDepthCam;
+
 	ImmaturePoint(int u_, int v_, FrameHessian* host_, float type, CalibHessian* HCalib);
 	~ImmaturePoint();
 

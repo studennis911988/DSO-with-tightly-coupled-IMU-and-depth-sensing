@@ -490,8 +490,7 @@ int main( int argc, char** argv )
 
 
             if(!skipFrame) fullSystem->addActiveFrame(img, i);
-            float iii = 1.3;
-            fullSystem->addActiveFrame(img ,iii);
+            fullSystem->addActiveFrame(img ,i);
 
 
 
