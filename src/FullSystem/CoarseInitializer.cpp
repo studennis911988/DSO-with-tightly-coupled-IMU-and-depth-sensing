@@ -923,7 +923,7 @@ void CoarseInitializer::setFirstRGBD(CalibHessian* HCalib, FrameHessian* newFram
         dGrads[i].setZero();
 
 }
-void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHessian)
+void CoarseInitializer::setFirst(CalibHessian* HCalib, FrameHessian* newFrameHessian)
 {
 #if TRACE_CODE_MODE
   std::cout << "setFirst" << std::endl;

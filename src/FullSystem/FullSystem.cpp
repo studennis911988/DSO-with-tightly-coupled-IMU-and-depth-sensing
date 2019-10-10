@@ -1085,7 +1085,6 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id) /// 1. all new 
         }
         else if(coarseInitializer->trackFrame(fh, outputWrapper))	// if SNAPPED  /// 7. if it's second frame => match all points in first frame
         {
-
             initializeFromInitializer(fh);    /// 8. set 2000 points in fistFrame to newFrame(second frame)
             lock.unlock();
             deliverTrackedFrame(fh, true);    /// 9. make second frame KF
@@ -1528,13 +1527,19 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 
 // get depth for new immuture points
 void FullSystem::rgbdMatch(FrameHessian *frame, MinimalImageB16 *depth_image){
+//    std::cout << "match immature pts 'before'=>" << frame->immaturePoints.size() << "\n";
+
+//    size_t numHasDepth = 0;
     for(ImmaturePoint* ipt : frame->immaturePoints){
         // trace by RGBD
         ImmaturePointStatus iptStaus = ipt->traceRGBD(depth_image, ipt->u, ipt->v);
         if(iptStaus == ImmaturePointStatus::IPS_GOOD){
             ipt->idepth_min = ipt->idepth_max = ipt->idepth_rgbd;
+//            numHasDepth++;
         }
     }
+//    std::cout << "match immature pts 'after'=>" << numHasDepth << "\n";
+
 }
 
 void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalImageB16* depth_img)
@@ -1770,7 +1775,7 @@ void FullSystem::makeNewTraces(FrameHessian* newFrame, float* gtDepth)
 	newFrame->pointHessiansMarginalized.reserve(numPointsTotal*1.2f);
 	newFrame->pointHessiansOut.reserve(numPointsTotal*1.2f);
 
-
+//std::cout << "make new immature pts 'before'=>" << newFrame->immaturePoints.size() << "\n";
 	for(int y=patternPadding+1;y<hG[0]-patternPadding-2;y++)
 	for(int x=patternPadding+1;x<wG[0]-patternPadding-2;x++)
 	{
@@ -1783,6 +1788,7 @@ void FullSystem::makeNewTraces(FrameHessian* newFrame, float* gtDepth)
 
 	}
 	//printf("MADE %d IMMATURE POINTS!\n", (int)newFrame->immaturePoints.size());
+//    std::cout << "make new immature pts 'after'=>" << newFrame->immaturePoints.size() << "\n";
 
 }
 
