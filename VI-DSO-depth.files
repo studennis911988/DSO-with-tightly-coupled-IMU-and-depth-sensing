@@ -47,7 +47,6 @@ src/OptimizationBackend/EnergyFunctionalStructs.h
 src/OptimizationBackend/MatrixAccumulators.h
 src/OptimizationBackend/RawResidualJacobian.h
 src/main_dso_pangolin.cpp
-src/trace_code.h
 src/util/DatasetReader.h
 src/util/FrameShell.h
 src/util/ImageAndExposure.h
@@ -59,10 +58,10 @@ src/util/Undistort.h
 src/util/globalCalib.cpp
 src/util/globalCalib.h
 src/util/globalFuncs.h
+src/util/my_setting.h
 src/util/nanoflann.h
 src/util/settings.cpp
 src/util/settings.h
-test.cpp
 thirdparty/Sophus/sophus/rxso3.hpp
 thirdparty/Sophus/sophus/se2.hpp
 thirdparty/Sophus/sophus/se3.hpp

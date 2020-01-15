@@ -735,7 +735,7 @@ void FullSystem::traceNewCoarse(FrameHessian* fh)
 
 		for(ImmaturePoint* ph : host->immaturePoints)
 		{
-#if !TRACE_ALL
+#if !TRACE_ALL_ON_EPIPOLAR
             /// skip the point with depth from camera
             if(ph->hasDepthFromDepthCam){
                 continue;
@@ -1483,12 +1483,6 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 		fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
 		fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(),fh->shell->aff_g2l);
 	}
-#if TRACE_CODE_MODE
-  std::cout << "makeKeyFrame" << std::endl;
-#endif
-#if TRACE_BACK_END
-  std::cout << "makeKeyFrame fh=>" << fh->shell->id << std::endl;
-#endif
 
 
 	traceNewCoarse(fh);
@@ -1531,19 +1525,6 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 	// =========================== Activate Points (& flag for marginalization). =========================
 	activatePointsMT();
 	ef->makeIDX();
-
-//    /// see how many efpoints has depth from depth camera
-//    for(FrameHessian* fh : frameHessians){
-//        size_t efpHasDepthNum = 0;
-//        for(EFPoint* efp : fh->efFrame->points){
-//            if(efp->hasDepthFromDepthCam){
-//                efpHasDepthNum++;
-//            }
-//        }
-//        std::cout << "frame id => " << fh->shell->id << "\t" << "total efp => " << fh->efFrame->points.size() << "\t" << "efp depth => " << efpHasDepthNum << "\n";
-//    }
-//    std::cout << "=======================Optimize=======================" << "\n";
-
 
 	// =========================== OPTIMIZE ALL =========================
 	fh->frameEnergyTH = frameHessians.back()->frameEnergyTH;
@@ -1605,7 +1586,7 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 
 //    // trace new immature points by depth camera
 
-    rgbdMatch(fh, fh->fh_depth);
+    depthMatching(fh, fh->fh_depth);
 
     if(linearizeOperation == false){
         delete fh->fh_depth;
@@ -1629,13 +1610,10 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 	printLogLine();
     //printEigenValLine();
 
-//    // unlock blocking cloning depth while there is still a frame in makekeyFrame
-//    makeKeyFrameBusy = false;
-
 }
 
 // get depth for new immuture points
-void FullSystem::rgbdMatch(FrameHessian *frame, MinimalImageB16 *depth_image){
+void FullSystem::depthMatching(FrameHessian *frame, MinimalImageB16 *depth_image){
 //    std::cout << "match immature pts 'before'=>" << frame->immaturePoints.size() << "\n";
 
 //    size_t numHasDepth = 0;

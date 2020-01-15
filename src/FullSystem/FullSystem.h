@@ -140,7 +140,7 @@ public:
     void addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
     void addActiveFrame(ImageAndExposure* image, int id);
 
-    void rgbdMatch(FrameHessian* frame, MinimalImageB16* depth_image);
+    void depthMatching(FrameHessian* frame, MinimalImageB16* depth_image);
 	// marginalizes a frame. drops / marginalizes points & residuals.
 	void marginalizeFrame(FrameHessian* frame);
 	void blockUntilMappingIsFinished();
