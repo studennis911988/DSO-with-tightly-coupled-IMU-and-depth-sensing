@@ -136,6 +136,7 @@ public:
 	virtual ~FullSystem();
 
 	// adds a new frame, and creates point & residual structs.
+    void trackingFrontEnd();
     void addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
     void addActiveFrame(ImageAndExposure* image, int id);
 
