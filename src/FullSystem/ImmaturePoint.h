@@ -86,6 +86,7 @@ public:
 	~ImmaturePoint();
 
     ImmaturePointStatus traceRGBD(MinimalImageB16* depth_img, int col, int row);
+    ImmaturePointStatus traceDepth(MinimalImageB16* depth_img, int col, int row);
 	ImmaturePointStatus traceOn(FrameHessian* frame, const Mat33f &hostToFrame_KRKi, const Vec3f &hostToFrame_Kt, const Vec2f &hostToFrame_affine, CalibHessian* HCalib, bool debugPrint=false);
 
     bool OutOfDepthImg(MinimalImageB16* depth_img_to_check,  Eigen::Vector3d pixel_to_check);

@@ -46,6 +46,8 @@
 
 #include "FullSystem/HessianBlocks.h"
 
+#include "trace_code.h"
+
 namespace dso
 {
 int PointFrameResidual::instanceCounter = 0;
@@ -68,6 +70,13 @@ PointFrameResidual::PointFrameResidual(PointHessian* point_, FrameHessian* host_
 	resetOOB();
 	J = new RawResidualJacobian();
 	assert(((long)J)%16==0);
+
+    hasDepthFromDepthCam = false;
+    /// if PointFrameResidual is came from PointHessian with depth from depth camra
+    if(point->hasDepthFromDepthCam){
+        this->hasDepthFromDepthCam = true;
+    }
+
 
 	isNew=true;
 }
@@ -180,6 +189,12 @@ double PointFrameResidual::linearize(CalibHessian* HCalib)
 
 	float wJI2_sum = 0;
 
+    /// lamda weighting for point that is observed by depth image
+    float lamda = DEPTH_WEIGHT;
+    if(lamda < 1.0f){
+        lamda = 1.0f;
+    }
+
 	for(int idx=0;idx<patternNum;idx++)
 	{
 		float Ku, Kv;
@@ -206,6 +221,12 @@ double PointFrameResidual::linearize(CalibHessian* HCalib)
 
 
 		float hw = fabsf(residual) < setting_huberTH ? 1 : setting_huberTH / fabsf(residual);
+
+        /// lamda weighting for point that is observed by depth image
+        if(hasDepthFromDepthCam){
+            hw = hw * lamda;
+        }
+
 		energyLeft += w*w*hw *residual*residual*(2-hw);
 
 		{
@@ -259,15 +280,29 @@ double PointFrameResidual::linearize(CalibHessian* HCalib)
 
 	state_NewEnergyWithOutlier = energyLeft;
 
-	if(energyLeft > std::max<float>(host->frameEnergyTH, target->frameEnergyTH) || wJI2_sum < 2)
-	{
-		energyLeft = std::max<float>(host->frameEnergyTH, target->frameEnergyTH);
-		state_NewState = ResState::OUTLIER;
-	}
-	else
-	{
-		state_NewState = ResState::IN;
-	}
+    if(hasDepthFromDepthCam){
+        if(energyLeft > lamda * std::max<float>(host->frameEnergyTH, target->frameEnergyTH) || wJI2_sum < 2 * lamda)
+        {
+            energyLeft = lamda * std::max<float>(host->frameEnergyTH, target->frameEnergyTH);
+            state_NewState = ResState::OUTLIER;
+        }
+        else
+        {
+            state_NewState = ResState::IN;
+        }
+    }
+    else{
+        if(energyLeft > std::max<float>(host->frameEnergyTH, target->frameEnergyTH) || wJI2_sum < 2)
+        {
+            energyLeft = std::max<float>(host->frameEnergyTH, target->frameEnergyTH);
+            state_NewState = ResState::OUTLIER;
+        }
+        else
+        {
+            state_NewState = ResState::IN;
+        }
+    }
+
 
 	state_NewEnergy = energyLeft;
 	return energyLeft;

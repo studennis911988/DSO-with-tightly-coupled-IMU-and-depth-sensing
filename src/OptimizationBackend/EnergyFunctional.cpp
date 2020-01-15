@@ -462,6 +462,10 @@ EFFrame* EnergyFunctional::insertFrame(FrameHessian* fh, CalibHessian* Hcalib)
 EFPoint* EnergyFunctional::insertPoint(PointHessian* ph)
 {
 	EFPoint* efp = new EFPoint(ph, ph->host->efFrame);
+    /// if EFPoint is from PointHessian with depth from depth camera
+    if(ph->hasDepthFromDepthCam){
+        efp->hasDepthFromDepthCam = true;
+    }
 	efp->idxInPoints = ph->host->efFrame->points.size();
 	ph->host->efFrame->points.push_back(efp);
 
@@ -796,6 +800,22 @@ void EnergyFunctional::solveSystemF(int iteration, double lambda, CalibHessian* 
 
 
 	bM_top = (bM+ HM * getStitchedDeltaF());
+#if TRACE_BACK_END
+    std::cout << "==== solve system =====" << "\n"
+                << "total EFframe=> " << nFrames << "\t"
+                << "total points => " << nPoints << "\t"
+                << "total residual=> " << nResiduals << "\n"
+                << "**Hessian size**" << "\n"
+                << "HA_top => " << HA_top.rows() <<"x"<< HA_top.cols() << "\t"
+                << "HL_top => " << HL_top.rows() <<"x"<< HL_top.cols() << "\t"
+                << "H_sc => " << H_sc.rows() <<"x"<< H_sc.cols() << "\n"
+                << "bA_top => " << bA_top.rows() <<"x"<< bA_top.cols() << "\t"
+                << "bL_top => " << bL_top.rows() <<"x"<< bL_top.cols() << "\t"
+                << "b_sc => " << b_sc.rows() <<"x"<< b_sc.cols() << "\n";
+#endif
+
+
+
 
 
 

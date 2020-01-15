@@ -320,6 +320,9 @@ private:
 	bool runMapping;
 	bool needToKetchupMapping;
 
+    // block cloning depth_img
+    bool makeKeyFrameBusy = false;
+
 	int lastRefStopID;
 };
 }

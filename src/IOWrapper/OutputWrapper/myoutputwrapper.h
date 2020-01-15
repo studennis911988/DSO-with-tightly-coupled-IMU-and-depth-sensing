@@ -80,7 +80,7 @@ public:
             if(final == true && publish_point_cloud){
                 for(FrameHessian* f : frames){
                     // clear point cloud
-                    pointCloud.clear();
+//                    pointCloud.clear();
                     // camera frame to world frame
                     const Eigen::Matrix<double,3,4> cam2world =  f->shell->camToWorld.matrix3x4();
 
@@ -98,7 +98,9 @@ public:
                         Eigen::Vector4d pixel2cam   = Eigen::Vector4d(x, y, z, 1.0f); // homogenous
                         Eigen::Vector3d pixel2world = cam2world * pixel2cam ;
                         // use sensor message directly ?
-                        pointCloud.push_back(pixel2world);
+//                        pointCloud.push_back(pixel2world);
+                        pointCloud.emplace_back(pixel2world);
+
                     }
                 }
             }

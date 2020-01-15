@@ -543,7 +543,13 @@ Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, floa
 	float* lpc_u = pc_u[lvl];
 	float* lpc_v = pc_v[lvl];
 	float* lpc_idepth = pc_idepth[lvl];
-	float* lpc_color = pc_color[lvl];
+    float* lpc_color = pc_color[lvl];
+
+//    if(lvl == 0){
+//        std::cout << "Frame2Frame Tracking from: " << lastRef->shell->id << " to fh: " << newFrame->shell->id << "\n"
+//                  << "num of point to project=> " << nl << "\n"
+//                  << "num of pointHessian in ref => " << lastRef->efFrame->points.size() << "\n";
+//    }
 
 
 	for(int i=0;i<nl;i++)

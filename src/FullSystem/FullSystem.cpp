@@ -527,7 +527,10 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
         coarseTracker->makeK(&Hcalib);
         coarseTracker->setCoarseTrackingRefForSecondFrame(frameHessians);
         lastF = coarseTracker->lastRef;
-        std::cout <<  "lastF id => " <<  lastF->shell->id;
+
+        // copy keyframe depth
+        fh->fh_depth = depth_image->getClone();
+//        std::cout <<  "lastF id => " <<  lastF->shell->id;
     }
 
 
@@ -732,11 +735,13 @@ void FullSystem::traceNewCoarse(FrameHessian* fh)
 
 		for(ImmaturePoint* ph : host->immaturePoints)
 		{
+#if !TRACE_ALL
             /// skip the point with depth from camera
             if(ph->hasDepthFromDepthCam){
-//                ph->lastTraceStatus = ImmaturePointStatus::IPS_SKIPPED;
                 continue;
             }
+#endif
+
 			ph->traceOn(fh, KRKi, Kt, aff, &Hcalib, false );
 
 			if(ph->lastTraceStatus==ImmaturePointStatus::IPS_GOOD) trace_good++;
@@ -816,7 +821,8 @@ void FullSystem::activatePointsMT()
 
 	//coarseTracker->debugPlotDistMap("distMap");
 
-	std::vector<ImmaturePoint*> toOptimize; toOptimize.reserve(20000);
+    std::vector<ImmaturePoint*> toOptimize;
+    toOptimize.reserve(20000);
 
 
 	for(FrameHessian* host : frameHessians)		// go through all active frames
@@ -852,6 +858,15 @@ void FullSystem::activatePointsMT()
 							&& ph->quality > setting_minTraceQuality
 							&& (ph->idepth_max+ph->idepth_min) > 0;
 
+//            if(rand()%100 == 0){
+//                std::cout << "active point" << "\n"
+//                          << "ef->points=> " << ef->nPoints << "\n"
+//                          << "host id=> " <<host->shell->id << "\n"
+//                          << "target id=> " << newestHs->shell->id << "\n"
+//                          << "status => " << ph->lastTraceStatus << "\n"
+//                          << "has depth? => " << ph->hasDepthFromDepthCam << "\n"
+//                          << "canactive? =>" << canActivate << "\n";
+//            }
 
 			// if I cannot activate the point, skip it. Maybe also delete it.
 			if(!canActivate)
@@ -882,6 +897,9 @@ void FullSystem::activatePointsMT()
 				{
 					coarseDistanceMap->addIntoDistFinal(u,v);
 					toOptimize.push_back(ph);
+//                    std::cout << "active! =>" << "\n"
+//                              << "hasdepth? =>" << ph->hasDepthFromDepthCam << "\n"
+//                              << "canactive?=>" << canActivate << "\n";
 				}
 			}
 			else
@@ -896,7 +914,8 @@ void FullSystem::activatePointsMT()
 //	printf("ACTIVATE: %d. (del %d, notReady %d, marg %d, good %d, marg-skip %d)\n",
 //			(int)toOptimize.size(), immature_deleted, immature_notReady, immature_needMarg, immature_want, immature_margskip);
 
-	std::vector<PointHessian*> optimized; optimized.resize(toOptimize.size());
+    std::vector<PointHessian*> optimized;
+    optimized.resize(toOptimize.size());
 
 	if(multiThreading)
 		treadReduce.reduce(boost::bind(&FullSystem::activatePointsMT_Reductor, this, &optimized, &toOptimize, _1, _2, _3, _4), 0, toOptimize.size(), 50);
@@ -1176,7 +1195,9 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
 	allFrameHistory.push_back(shell);
 
     // depth image
-    current_frame_depth_img = depth_image;
+//    current_frame_depth_img = depth_image;
+
+
 
 	// =========================== make Images / derivatives etc. =========================
 	fh->ab_exposure = image->exposure_time;
@@ -1239,7 +1260,50 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
             ow->publishCamPose(fh->shell, &Hcalib);
 
 		lock.unlock();
+#if TRACE_CODE_MODE
+  std::cout << "deliverTrackedFrame1" << std::endl;
+#endif
+
+      if(needToMakeKF){
+//          std::cout << "clone fh=>" << fh->shell->id << std::endl;
+
+          if(linearizeOperation){
+
+              fh->fh_depth = depth_image;
+          }
+          else{
+              // need to copy to garantee thread safe
+              fh->fh_depth = depth_image->getClone();
+          }
+       }
+
+
+//    if(needToMakeKF){
+//        if(linearizeOperation){
+//            std::cout << "clone fh=>" << fh->shell->id << std::endl;
+
+//            fh->fh_depth = depth_image;
+//        }
+//        else{
+//            static int skipCNT = 1;
+//            if(makeKeyFrameBusy && skipCNT < SKIPMAX ){
+//                std::cout << "busy making key frame. skip clone fh=>" << fh->shell->id << "\n";
+//                skipCNT++;
+//            }
+//            else{
+//                std::cout << "clone fh=>" << fh->shell->id << std::endl;
+
+//                fh->fh_depth = depth_image->getClone();
+//                skipCNT = 1;
+//            }
+//        }
+//     }
+
+
 		deliverTrackedFrame(fh, needToMakeKF);
+        #if TRACE_CODE_MODE
+          std::cout << "deliverTrackedFrame2" << std::endl;
+        #endif
 
 		return;
 	}
@@ -1278,7 +1342,10 @@ void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
     {
 		boost::unique_lock<boost::mutex> lock(trackMapSyncMutex);
 		unmappedTrackedFrames.push_back(fh);
-		if(needKF) needNewKFAfter=fh->shell->trackingRef->id;
+        if(needKF){
+            needNewKFAfter=fh->shell->trackingRef->id;
+        }
+
 		trackedFrameSignal.notify_all();
 
 		while(coarseTracker_forNewKF->refFrameID == -1 && coarseTracker->refFrameID == -1 )
@@ -1307,7 +1374,7 @@ void FullSystem::mappingLoop()
 
 
 		// guaranteed to make a KF for the very first two tracked frames.
-		if(allKeyFramesHistory.size() <= 2)
+        if(allKeyFramesHistory.size() <= 1)
 		{
 			lock.unlock();
             makeKeyFrame(fh);
@@ -1336,13 +1403,23 @@ void FullSystem::mappingLoop()
 					fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
 					fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(),fh->shell->aff_g2l);
 				}
+                if(fh->fh_depth != nullptr){
+                    delete fh->fh_depth;
+//                    std::cout << "delete depth cathch fh=>" << fh->shell->id << "\n";
+
+                }
 				delete fh;
 			}
 
 		}
 		else
 		{
-			if(setting_realTimeMaxKF || needNewKFAfter >= frameHessians.back()->shell->id)
+            if(needNewKFAfter >= frameHessians.back()->shell->id && fh->fh_depth == nullptr){
+                std::cout << "===== Error =====" << "\n"
+                          << "does not flag as KF, but makeKeyFrame!"
+                          << "\n";
+            }
+            if((setting_realTimeMaxKF || needNewKFAfter >= frameHessians.back()->shell->id) && fh->fh_depth != nullptr)     // ** TODO : some frame without needMakeKF will still be a keyframe in mappingLoop somehow, adding nullptr checking for safe....
 			{
 				lock.unlock();
 				makeKeyFrame(fh);
@@ -1381,13 +1458,24 @@ void FullSystem::makeNonKeyFrame(FrameHessian* fh)
 		fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
 		fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(),fh->shell->aff_g2l);
 	}
-
+#if TRACE_CODE_MODE
+  std::cout << "makeNonKeyFrame" << std::endl;
+#endif
 	traceNewCoarse(fh);
+    if(fh->fh_depth != nullptr){
+        delete fh->fh_depth;
+//        std::cout << "delete depth nokey fh=>" << fh->shell->id << "\n";
+
+    }
 	delete fh;
 }
 
 void FullSystem::makeKeyFrame(FrameHessian* fh)
 {
+//    // block cloning depth while there is still a frame in makekeyFrame
+
+//      makeKeyFrameBusy = true;
+
 	// needs to be set by mapping thread
 	{
 		boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
@@ -1395,6 +1483,13 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 		fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
 		fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(),fh->shell->aff_g2l);
 	}
+#if TRACE_CODE_MODE
+  std::cout << "makeKeyFrame" << std::endl;
+#endif
+#if TRACE_BACK_END
+  std::cout << "makeKeyFrame fh=>" << fh->shell->id << std::endl;
+#endif
+
 
 	traceNewCoarse(fh);
 
@@ -1419,7 +1514,7 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 	int numFwdResAdde=0;
 	for(FrameHessian* fh1 : frameHessians)		// go through all active frames
 	{
-		if(fh1 == fh) continue;
+        if(fh1 == fh) continue;  // no keypoint added in latest keyframe
 		for(PointHessian* ph : fh1->pointHessians)
 		{
 			PointFrameResidual* r = new PointFrameResidual(ph, fh1, fh);
@@ -1436,6 +1531,18 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 	// =========================== Activate Points (& flag for marginalization). =========================
 	activatePointsMT();
 	ef->makeIDX();
+
+//    /// see how many efpoints has depth from depth camera
+//    for(FrameHessian* fh : frameHessians){
+//        size_t efpHasDepthNum = 0;
+//        for(EFPoint* efp : fh->efFrame->points){
+//            if(efp->hasDepthFromDepthCam){
+//                efpHasDepthNum++;
+//            }
+//        }
+//        std::cout << "frame id => " << fh->shell->id << "\t" << "total efp => " << fh->efFrame->points.size() << "\t" << "efp depth => " << efpHasDepthNum << "\n";
+//    }
+//    std::cout << "=======================Optimize=======================" << "\n";
 
 
 	// =========================== OPTIMIZE ALL =========================
@@ -1493,11 +1600,18 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 	ef->marginalizePointsF();
 
 
-	// =========================== add new Immature points & new residuals =========================
-	makeNewTraces(fh, 0);
+    // =========================== add new Immature points & new residuals =========================
+    makeNewTraces(fh, 0);
 
-    // trace new immature points by depth camera
-    rgbdMatch(fh, current_frame_depth_img);
+//    // trace new immature points by depth camera
+
+    rgbdMatch(fh, fh->fh_depth);
+
+    if(linearizeOperation == false){
+        delete fh->fh_depth;
+//        std::cout << "delete depth fh=>" << fh->shell->id << "\n";
+    }
+
 
 
     for(IOWrap::Output3DWrapper* ow : outputWrapper)
@@ -1514,6 +1628,10 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 
 	printLogLine();
     //printEigenValLine();
+
+//    // unlock blocking cloning depth while there is still a frame in makekeyFrame
+//    makeKeyFrameBusy = false;
+
 }
 
 // get depth for new immuture points
@@ -1523,7 +1641,13 @@ void FullSystem::rgbdMatch(FrameHessian *frame, MinimalImageB16 *depth_image){
 //    size_t numHasDepth = 0;
     for(ImmaturePoint* ipt : frame->immaturePoints){
         // trace by RGBD
+#if     USE_RGB
         ImmaturePointStatus iptStaus = ipt->traceRGBD(depth_image, ipt->u, ipt->v);
+#elif   USE_INFR1
+        ImmaturePointStatus iptStaus = ipt->traceDepth(depth_image, ipt->u, ipt->v);
+
+
+#endif
         if(iptStaus == ImmaturePointStatus::IPS_GOOD){
             ipt->idepth_min = ipt->idepth_max = ipt->idepth_rgbd;
 //            numHasDepth++;
@@ -1590,6 +1714,7 @@ void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalIma
             ph->setIdepth(ipt->idepth_rgbd); /* TODO * What does this param affect? */
             ph->setIdepthZero(ipt->idepth_rgbd);
             ph->hasDepthPrior=true;
+            ph->hasDepthFromDepthCam = true;
             ph->setPointStatus(PointHessian::ACTIVE);
 
             // add to first frame

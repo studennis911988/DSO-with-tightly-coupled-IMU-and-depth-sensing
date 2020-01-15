@@ -112,6 +112,8 @@ struct FrameHessian
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 	EFFrame* efFrame;
 
+    MinimalImageB16* fh_depth = nullptr;
+
 	// constant info & pre-calculated values
 	//DepthImageWrap* frame;
 	FrameShell* shell;
@@ -427,6 +429,8 @@ struct PointHessian
 	float step;
 	float step_backup;
 	float idepth_backup;
+
+    bool hasDepthFromDepthCam;
 
 	float nullspaces_scale;
 	float idepth_hessian;

@@ -827,7 +827,7 @@ void CoarseInitializer::setFirstRGBD(CalibHessian* HCalib, FrameHessian* newFram
             if(lvl==0 && statusMap[x+y*wl] != 0){
                 ImmaturePoint* pt = new ImmaturePoint(x, y, firstFrame, statusMap[x+y*wl], HCalib);
                 // get pt depth
-                ImmaturePointStatus pt_status = pt->traceRGBD(depth_img, x, y);
+                ImmaturePointStatus pt_status = pt->traceDepth(depth_img, x, y);
 
                 if(pt_status == ImmaturePointStatus::IPS_GOOD){
                     pl[nl].u = x;
@@ -909,11 +909,13 @@ void CoarseInitializer::setFirstRGBD(CalibHessian* HCalib, FrameHessian* newFram
                << "lvl" <<lvl << std::endl;
 #endif
     }
-     std::cout << "num of points is avaliable for initalization =>" << numPoints[0];
+//     std::cout << "num of points is avaliable for initalization =>" << numPoints[0];
     delete[] statusMap;
     delete[] statusMapB;
 
     makeNN();
+
+    firstFrame->fh_depth = depth_img->getClone();
 
     thisToNext=SE3();
 //    snapped = false;

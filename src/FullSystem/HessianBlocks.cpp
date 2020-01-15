@@ -37,6 +37,13 @@ PointHessian::PointHessian(const ImmaturePoint* const rawPoint, CalibHessian* Hc
 	instanceCounter++;
 	host = rawPoint->host;
 	hasDepthPrior=false;
+    //
+    hasDepthFromDepthCam = false;
+
+    /// if PointHessian is came from immuature points with depth from depth camra
+    if(rawPoint->hasDepthFromDepthCam){
+        this->hasDepthFromDepthCam = true;
+    }
 
 	idepth_hessian=0;
 	maxRelBaseline=0;
@@ -132,11 +139,11 @@ void FrameHessian::makeImages(float* color, CalibHessian* HCalib)
 	{
 		dIp[i] = new Eigen::Vector3f[wG[i]*hG[i]];
 		absSquaredGrad[i] = new float[wG[i]*hG[i]];
-#if TRACE_CODE_MODE
-  std::cout << "makeImages" << "\t"
-            <<"dIp[i]->cols() " << dIp[i]->cols() << "\t"
-            <<"pyrLevelsUsed " << i << std::endl;
-#endif
+//#if TRACE_CODE_MODE
+//  std::cout << "makeImages" << "\t"
+//            <<"dIp[i]->cols() " << dIp[i]->cols() << "\t"
+//            <<"pyrLevelsUsed " << i << std::endl;
+//#endif
 	}
 	dI = dIp[0];
 

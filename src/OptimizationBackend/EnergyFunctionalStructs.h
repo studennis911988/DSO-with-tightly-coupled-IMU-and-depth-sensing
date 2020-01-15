@@ -103,7 +103,7 @@ class EFPoint
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-	EFPoint(PointHessian* d, EFFrame* host_) : data(d),host(host_)
+    EFPoint(PointHessian* d, EFFrame* host_) : data(d),host(host_), hasDepthFromDepthCam(false)
 	{
 		takeData();
 		stateFlag=EFPointStatus::PS_GOOD;
@@ -111,6 +111,8 @@ public:
 	void takeData();
 
 	PointHessian* data;
+
+    bool hasDepthFromDepthCam;
 
 
 

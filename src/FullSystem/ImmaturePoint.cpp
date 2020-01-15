@@ -27,7 +27,7 @@
 #include "util/FrameShell.h"
 #include "FullSystem/ResidualProjections.h"
 #include "util/globalCalib.h"
-
+#include "trace_code.h"
 namespace dso
 {
 ImmaturePoint::ImmaturePoint(int u_, int v_, FrameHessian* host_, float type, CalibHessian* HCalib)
@@ -73,12 +73,15 @@ ImmaturePoint::~ImmaturePoint()
  * @return ImmuatuePoints Status & depth in meters
  */
 ImmaturePointStatus ImmaturePoint::traceRGBD(MinimalImageB16* depth_img, int col, int row){
-    float scaleS = 0.001; // mm -> meters
+    float scaleS = DEPTH_SCALE; // mm -> meters
 
     Eigen::Vector2d pixel(col, row);
 
     float depth = (float)rgbGetDepthValue(pixel, depth_img) * scaleS;
-//    std::cout << "(" << col << "," << row <<") depth=>" << depth << "\n";
+
+    if(depth > 10 || depth < 0.11f){      // realsense D435 depth range (min,max) = (0.11, 10)
+        depth = 0.0f;
+    }
 
     // if the there is depth value in that pixel
     if(depth != 0){
@@ -139,6 +142,27 @@ unsigned short ImmaturePoint::rgbGetDepthValue(const Eigen::Vector2d pixel, Mini
 
 }
 
+ImmaturePointStatus ImmaturePoint::traceDepth(MinimalImageB16* depth_img, int col, int row){
+    float scaleS = DEPTH_SCALE; // mm -> meters
+
+
+    float depth = (float)depth_img->data[(int)row * depth_img->w + col] * scaleS;
+
+    if(depth > DEPTH_RANGE_MAX || depth < DEPTH_RANGE_MIN){      // realsense D435 depth range (min,max) = (0.11, 10)
+        depth = 0.0f;
+    }
+
+    // if the there is depth value in that pixel
+    if(depth != 0){
+        idepth_rgbd = 1 / depth;
+        hasDepthFromDepthCam = true;
+        return lastTraceStatus = ImmaturePointStatus::IPS_GOOD;
+    }
+    else{
+//        idepth_rgbd = 0; /* TODO*/
+        return lastTraceStatus = ImmaturePointStatus::IPS_UNINITIALIZED;
+    }
+}
 
 /*
  * returns

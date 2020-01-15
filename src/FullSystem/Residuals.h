@@ -57,6 +57,7 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 	EFResidual* efResidual;
+    bool hasDepthFromDepthCam;
 
 	static int instanceCounter;
 

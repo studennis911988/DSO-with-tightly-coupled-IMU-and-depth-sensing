@@ -121,7 +121,7 @@ else()
     set(BOOST_THREAD_LIBRARY boost_thread)
 endif()
 
-## build main executable (only if we have both OpenCV and Pangolin)
+# build main executable (only if we have both OpenCV and Pangolin)
 if (OpenCV_FOUND AND Pangolin_FOUND)
         message("--- compiling dso_dataset.")
         add_executable(dso_dataset ${PROJECT_SOURCE_DIR}/src/main_dso_pangolin.cpp )
