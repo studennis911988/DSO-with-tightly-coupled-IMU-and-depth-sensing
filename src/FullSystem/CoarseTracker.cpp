@@ -86,7 +86,10 @@ CoarseTracker::CoarseTracker(int ww, int hh) : lastRef_aff_g2l(0,0)
     buf_warped_refColor = allocAligned<4,float>(ww*hh, ptrToDelete);
 
 
-	newFrame = 0;
+    // vio
+    imuIntegrator = new IMUIntegrator();
+    imuPreintegrator = new IMUPreintegrator();
+    newFrame = 0;
 	lastRef = 0;
 	debugPlot = debugPrint = true;
 	w[0]=h[0]=0;
@@ -302,6 +305,23 @@ void CoarseTracker::makeCoarseDepthL0(std::vector<FrameHessian*> frameHessians)
 
 				idepth[0][u+w[0]*v] += new_idepth *weight;
 				weightSums[0][u+w[0]*v] += weight;
+
+                // 2020.1.21 record point with/out depth from camera
+
+
+
+                if(ph->hasDepthFromDepthCam)
+                {
+                    idepth_fromCamera.emplace_back(Vec2i(u,v));
+                }
+                else
+                {
+                    idepth_fromSearch.emplace_back(Vec2i(u,v));
+                }
+
+
+                idepth[0][u+w[0]*v] += new_idepth *weight;
+                weightSums[0][u+w[0]*v] += weight;
 			}
 		}
 	}
@@ -689,6 +709,7 @@ void CoarseTracker::setCoarseTrackingRef(
 {
 	assert(frameHessians.size()>0);
     lastRef = frameHessians.back();
+    std::cout << "set new tracking ref :" << lastRef->shell->id << "\n";
 	makeCoarseDepthL0(frameHessians);
 
 
@@ -699,6 +720,47 @@ void CoarseTracker::setCoarseTrackingRef(
 	firstCoarseRMSE=-1;
 
 }
+void CoarseTracker::predictMotionPrior(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
+{
+    // use last frame for more accurate pose and velocity
+//    std::cout << "last frame id :" << lastF->id << "\n";
+    // use bias of lastest keyframe since bias only get updated in KF
+
+//    std::cout << "last key frame id :" << lastKF->shell->id << "\n";
+
+    SE3 lastF_pose  = lastF->camToWorld;
+    Vec3 lastF_vel  = lastF->velocity;
+//    std::cout << "lastF->velocity:" << lastF->velocity.transpose() << "\n";
+    Vec3 lastKF_gyro_bias = lastKF->bias_g;
+//    std::cout << "lastKF->bias_g :" << lastKF->bias_g.transpose() << "\n";
+    Vec3 lastKF_acc_bias  = lastKF->bias_a;
+
+    imuIntegrator->setPredictReference(lastF_pose, lastF_vel, lastKF_gyro_bias, lastKF_acc_bias);
+
+    for(int i = 0; i < dt.size(); i++)
+    {
+        imuIntegrator->predict(dt[i], angular_vel[i], linear_acc[i]);
+    }
+}
+
+void CoarseTracker::caculateIMUfactor(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
+{
+    // reset pre-integrator if reference keyframe changed
+    static int lastKF_id = lastKF->shell->id;
+    if(lastKF->shell->id != lastKF_id)
+    {
+        imuPreintegrator->reset();
+        lastKF_id = lastKF->shell->id;
+    }
+
+    // preintegration term w.r.t reference keyframe
+    imuPreintegrator->propagate(dt, angular_vel, linear_acc);
+
+
+    // store in frame shell for keyframe optimization
+
+}
+
 bool CoarseTracker::trackNewestCoarse(
 		FrameHessian* newFrameHessian,
 		SE3 &lastToNew_out, AffLight &aff_g2l_out,
@@ -883,7 +945,37 @@ bool CoarseTracker::trackNewestCoarse(
 	return true;
 }
 
+void CoarseTracker::debugPlotDepthSourse(std::vector<IOWrap::Output3DWrapper*> &wraps)
+{
+    int lvl = 0;        // finest level
+    static MinimalImageB3 ds(w[lvl], h[lvl]); // depth source plot
+    ds.setBlack();
+    for(int i=0;i<h[lvl]*w[lvl];i++)
+    {
+        int c = lastRef->dIp[lvl][i][0]*0.9f;
+        if(c>255) c=255;
+        ds.at(i) = Vec3b(c,c,c);
+    }
 
+    for(size_t ptb = 0; ptb < idepth_fromCamera.size(); ptb++)    // point blue
+    {
+        ds.setPixelCirc(idepth_fromCamera[ptb](0), idepth_fromCamera[ptb](1), makeBlueOrRed("blue"));
+    }
+    for(size_t ptr = 0; ptr < idepth_fromSearch.size(); ptr++)   // point red
+    {
+        ds.setPixelCirc(idepth_fromSearch[ptr](0), idepth_fromSearch[ptr](1), makeBlueOrRed("red"));
+    }
+
+    // clear buffer
+    idepth_fromCamera.clear();
+    idepth_fromSearch.clear();
+
+    for(IOWrap::Output3DWrapper* ow : wraps)
+    {
+        ow->pushDepthSourseImage(&ds);
+    }
+
+}
 
 void CoarseTracker::debugPlotIDepthMap(float* minID_pt, float* maxID_pt, std::vector<IOWrap::Output3DWrapper*> &wraps)
 {

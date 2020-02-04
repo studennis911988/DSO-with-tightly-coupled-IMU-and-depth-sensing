@@ -27,7 +27,7 @@
 #include "util/FrameShell.h"
 #include "FullSystem/ResidualProjections.h"
 #include "util/globalCalib.h"
-#include "trace_code.h"
+#include "util/my_setting.h"
 namespace dso
 {
 ImmaturePoint::ImmaturePoint(int u_, int v_, FrameHessian* host_, float type, CalibHessian* HCalib)
@@ -82,7 +82,6 @@ ImmaturePointStatus ImmaturePoint::traceRGBD(MinimalImageB16* depth_img, int col
     if(depth > 10 || depth < 0.11f){      // realsense D435 depth range (min,max) = (0.11, 10)
         depth = 0.0f;
     }
-
     // if the there is depth value in that pixel
     if(depth != 0){
         idepth_rgbd = 1 / depth;

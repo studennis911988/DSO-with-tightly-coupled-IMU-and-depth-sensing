@@ -28,6 +28,8 @@
 #include <string.h>
 #include <string>
 #include <cmath>
+#include "NumType.h"
+
 
 
 namespace dso
@@ -204,7 +206,7 @@ extern int staticPattern[10][40][2];
 extern int staticPatternNum[10];
 extern int staticPatternPadding[10];
 
-
+extern Vec3 gravity_positive;
 
 
 //#define patternNum staticPatternNum[setting_pattern]

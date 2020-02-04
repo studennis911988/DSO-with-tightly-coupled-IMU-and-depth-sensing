@@ -136,8 +136,8 @@ public:
 	virtual ~FullSystem();
 
 	// adds a new frame, and creates point & residual structs.
-    void trackingFrontEnd(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
-    void addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
+    void trackingFrontEnd(ImageAndExposure* image, MinimalImageB16* depth_image, int id, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
+//    void addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
     void addActiveFrame(ImageAndExposure* image, int id);
 
     void depthMatching(FrameHessian* frame, MinimalImageB16* depth_image);
@@ -156,10 +156,19 @@ public:
 
     std::vector<IOWrap::Output3DWrapper*> outputWrapper;
 
+    bool imu_intialized;  // add 2020.1.31
+    void initializeGravityAndBias(Vec3 sum_angular_vel, Vec3 sum_linear_vel, int buffer_size);  // add at 2020.1.31
+
+    bool is_first_image; // add 2020.1.31
+    void initializeVisual(ImageAndExposure* image, MinimalImageB16* depth_image, int id); // add 2020.1.31
+
+
+
 	bool isLost;
 	bool initFailed;
 	bool initialized;
 	bool linearizeOperation;
+    SE3 inital_pose;
 
 
 	void setGammaFunction(float* BInv);
@@ -181,7 +190,7 @@ private:
 	double linAllPointSinle(PointHessian* point, float outlierTHSlack, bool plot);
 
 	// mainPipelineFunctions
-    Vec4 trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image);
+    Vec4 trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
 	Vec4 trackNewCoarse(FrameHessian* fh);
 	void traceNewCoarse(FrameHessian* fh);
 	void activatePoints();

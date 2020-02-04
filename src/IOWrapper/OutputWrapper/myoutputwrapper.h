@@ -64,6 +64,10 @@ public:
             }
         }
 
+        virtual void pushDepthSourseImage(MinimalImageB3* image) override
+        {
+            depth_image_source_ptr = image;
+        }
 
         virtual void publishKeyframes( std::vector<FrameHessian*> &frames, bool final, CalibHessian* HCalib) override{
 
@@ -128,6 +132,10 @@ public:
         MinimalImageB3* depth_image_ptr;
         bool publish_depth_image = false;
 
+        // depth source map
+        MinimalImageB3* depth_image_source_ptr;
+        bool publish_depth_source_image = false;
+
         // point cloud
         std::vector<Eigen::Vector3d> pointCloud;
         bool publish_point_cloud = false;
@@ -145,24 +153,5 @@ public:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #endif // MYOUTPUTWRAPPER_H
+

@@ -20,7 +20,6 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-#include "trace_code.h"
 
 /*
  * KFBuffer.cpp
@@ -37,6 +36,8 @@
 #include "FullSystem/PixelSelector2.h"
 #include "FullSystem/ImmaturePoint.h"
 #include "util/nanoflann.h"
+#include "util/my_setting.h"
+
 
 
 #if !defined(__SSE3__) && !defined(__SSE2__) && !defined(__SSE1__)

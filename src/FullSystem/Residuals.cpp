@@ -46,7 +46,7 @@
 
 #include "FullSystem/HessianBlocks.h"
 
-#include "trace_code.h"
+#include "util/my_setting.h"
 
 namespace dso
 {

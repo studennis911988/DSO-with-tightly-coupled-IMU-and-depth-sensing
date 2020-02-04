@@ -1,6 +1,8 @@
 #ifndef MY_SETTING_H
 #define MY_SETTING_H
 
+#include <iostream>
+#include "NumType.h"
 
 #define USE_RGB    0    // use RGB or infra1 for image resourse
 #define USE_INFR1  1
@@ -16,4 +18,8 @@
 
 #define TRACE_CODE_MODE  0  // print
 
+
+#define SHOW(x)   std::cout << "------"#x"------" << std::endl << x << std::endl;
+
+#define setting_IMU_motion_prior  0
 #endif // MY_SETTING_H

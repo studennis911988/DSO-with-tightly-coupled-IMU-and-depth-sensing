@@ -185,6 +185,7 @@ public:
         virtual bool needPushDepthImage() {return false;}
 
 
+        virtual void pushDepthSourseImage(MinimalImageB3* image){}
 
         /* Usage:
          * called once after a new keyframe is created, with the forward-warped inverse depthmap for that keyframe.

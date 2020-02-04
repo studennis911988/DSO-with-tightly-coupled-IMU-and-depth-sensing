@@ -156,6 +156,14 @@ struct FrameHessian
 	Vec10 step_backup;
 	Vec10 state_backup;
 
+    // IMU
+    Vec3 velocity;
+    Vec3 bias_g;
+    Vec3 bias_a;
+    Vec3 delta_bias_g;  // gyro bias update value ( for preintegration correction)
+    Vec3 delta_bias_a;  //according to pre-integration, when bias is updated, pre-integration should also be updated using
+                        //* first-order expansion of ba and bg
+
 
     EIGEN_STRONG_INLINE const SE3 &get_worldToCam_evalPT() const {return worldToCam_evalPT;}
     EIGEN_STRONG_INLINE const Vec10 &get_state_zero() const {return state_zero;}
@@ -252,6 +260,11 @@ struct FrameHessian
 		frameID = -1;
 		efFrame = 0;
 		frameEnergyTH = 8*8*patternNum;
+
+        // imu
+        velocity = Vec3::Zero();
+        bias_g = Vec3::Zero();
+        bias_a = Vec3::Zero();
 
 
 

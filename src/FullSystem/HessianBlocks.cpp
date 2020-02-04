@@ -22,7 +22,7 @@
 */
 
 
-#include "trace_code.h"
+#include "util/my_setting.h"
 #include "FullSystem/HessianBlocks.h"
 #include "util/FrameShell.h"
 #include "FullSystem/ImmaturePoint.h"

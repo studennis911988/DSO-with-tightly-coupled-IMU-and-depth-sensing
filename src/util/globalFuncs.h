@@ -375,6 +375,18 @@ inline Vec3b makeRedGreen3B(float val)	// 0 = red, 1=green, 0.5=yellow.
 
 }
 
+inline Vec3b makeBlueOrRed(std::string color){
+    if(color == "blue")
+    {
+        return Vec3b(0,0,255);    //RGB
+    }
+    else
+    {
+        return Vec3b(255,0,0);    //RGB
+    }
+}
+
+
 
 
 

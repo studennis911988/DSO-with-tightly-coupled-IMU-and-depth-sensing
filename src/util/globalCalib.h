@@ -41,11 +41,20 @@ namespace dso
 	extern float wM3G;
 	extern float hM3G;
 
-    extern Eigen::Matrix3d rgbPixel2depthPixel_rotation;
-    extern Eigen::Vector3d rgbPixel2depthPixel_translation;
+    extern Mat33 rgbPixel2depthPixel_rotation;
+    extern Vec3  rgbPixel2depthPixel_translation;
+
+//    extern Vec3 gravity;
+
+//    extern Mat33 R_ic;
+//    extern Vec3  t_ic;
+
+
 
 	void setGlobalCalib(int w, int h, const Eigen::Matrix3f &K );
 
     void setRGB2DepthSE3FormFile(std::string RGB2DepthSE3name);
+
+    void setCAM2IMUSE3FormFile(std::string CAM2IMUSE3name);
 
 }

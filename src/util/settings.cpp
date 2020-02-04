@@ -311,4 +311,6 @@ int staticPatternPadding[10] = {
 };
 
 
+Vec3 gravity_positive;
+
 }

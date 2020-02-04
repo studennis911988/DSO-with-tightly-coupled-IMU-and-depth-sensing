@@ -33,7 +33,7 @@
 #include "IOWrapper/Output3DWrapper.h"
 
 
-
+#include "IMU.h"
 
 namespace dso
 {
@@ -77,10 +77,20 @@ public:
 	int w[PYR_LEVELS];
 	int h[PYR_LEVELS];
 
+    void debugPlotDepthSourse(std::vector<IOWrap::Output3DWrapper*> &wraps);
     void debugPlotIDepthMap(float* minID, float* maxID, std::vector<IOWrap::Output3DWrapper*> &wraps);
     void debugPlotIDepthMapFloat(std::vector<IOWrap::Output3DWrapper*> &wraps);
 
-	FrameHessian* lastRef;
+    // vio
+    IMUIntegrator* imuIntegrator;
+    IMUPreintegrator* imuPreintegrator;
+    // imu
+    void predictMotionPrior(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
+//    void predictMotionPrior(double dt, const Vec3& angular_vel,  const Vec3& linear_acc); // add 2020.2.3
+    void caculateIMUfactor(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
+
+
+    FrameHessian* lastRef;
 	AffLight lastRef_aff_g2l;
 	FrameHessian* newFrame;
 	int refFrameID;
@@ -96,6 +106,10 @@ private:
 	float* idepth[PYR_LEVELS];
 	float* weightSums[PYR_LEVELS];
 	float* weightSums_bak[PYR_LEVELS];
+
+    // 2020/1/21 plot pointHessian with/without depth from depth camera
+    std::vector<Vec2i> idepth_fromCamera;
+    std::vector<Vec2i> idepth_fromSearch;
 
 
 	Vec6 calcResAndGS(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &refToNew, AffLight aff_g2l, float cutoffTH);

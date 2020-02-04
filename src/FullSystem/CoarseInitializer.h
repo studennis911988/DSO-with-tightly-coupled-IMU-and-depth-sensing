@@ -97,6 +97,10 @@ public:
 	AffLight thisToNext_aff;
 	SE3 thisToNext;
 
+    Vec3 initial_gyro_bias; // add on 2020.2.2
+    Vec3 initial_accel_bias;// add on 2020.2.2
+    SE3 inital_pose;// add on 2020.2.2
+    Vec3 gravity;
 
 	FrameHessian* firstFrame;
 	FrameHessian* newFrame;
@@ -160,6 +164,7 @@ private:
 
     void debugPlot(int lvl, std::vector<IOWrap::Output3DWrapper*> &wraps);
 	void makeNN();
+
 };
 
 

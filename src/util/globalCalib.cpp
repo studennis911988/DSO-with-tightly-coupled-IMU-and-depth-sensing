@@ -28,7 +28,7 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
-#include "trace_code.h"
+#include "util/my_setting.h"
 namespace dso
 {
 	int wG[PYR_LEVELS], hG[PYR_LEVELS];
@@ -148,12 +148,45 @@ namespace dso
             rgbPixel2depthPixel_translation << param[9], param[10], param[11];
 
             std::cout << "rgbPixel2depthPixel_rotation" << "\n" << rgbPixel2depthPixel_rotation << "\n";
-            std::cout << "rgbPixel2depthPixel_translation" << "\n" << rgbPixel2depthPixel_translation << "\n";
+            std::cout << "rgbPixel2depthPixel_translation" << "\n" << rgbPixel2depthPixel_translation.transpose() << "\n";
 
         }
     }
 
+//    void setCAM2IMUSE3FormFile(std::string CAM2IMUSE3name){
 
+//        printf("Reading CAM to IMU SE3 from file %s", CAM2IMUSE3name.c_str());
 
+//        std::ifstream f(CAM2IMUSE3name.c_str());
+//        if (!f.good())
+//        {
+//            f.close();
+//            printf(" ... not found. Cannot operate without CAM to IMU SE3, shutting down.\n");
+//            f.close();
+//            return ;
+//        }
 
+//        printf(" ... found!\n");
+//        std::string l1;
+//        std::getline(f,l1);
+//        f.close();
+
+//        float param[12];
+
+//        if(std::sscanf(l1.c_str(), "%f %f %f %f %f %f %f %f %f %f %f %f",
+//           &param[0], &param[1], &param[2], &param[3], &param[4], &param[5], &param[6], &param[7], &param[8],
+//           &param[9], &param[10], &param[11]) == 12)
+//        {
+//            printf("found CAM to IMU SE3, building Matrixs.\n");
+
+//            R_ic << param[0], param[1], param[2],
+//                    param[3], param[4], param[5],
+//                    param[6], param[7] , param[8];
+//            t_ic = Vec3(param[9], param[10], param[11]);
+
+//            std::cout << "CAM to IMU_rotation" << "\n" << R_ic << "\n";
+//            std::cout << "CAM to IMU_translation" << "\n" << t_ic.transpose() << "\n";
+
+//        }
+//    }
 }

@@ -122,6 +122,10 @@ public:
             return false;
         }
 
+        virtual void pushDepthSourseImage(MinimalImageB3* image) override
+        {
+        }
+
         virtual void pushDepthImageFloat(MinimalImageF* image, FrameHessian* KF ) override
         {
             printf("OUT: Predicted depth for KF %d (id %d, time %f, internal frame-ID %d). CameraToWorld:\n",

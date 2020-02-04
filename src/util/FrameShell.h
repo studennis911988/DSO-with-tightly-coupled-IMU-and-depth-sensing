@@ -54,6 +54,14 @@ public:
 	int marginalizedAt;
 	double movedByOpt;
 
+    // IMU
+    Vec3 velocity;
+    Vec3 bias_g;
+    Vec3 bias_a;
+
+    // preintegration term
+//    std::pair<int refFrameID, Mat33 delta_R>  preintegration_shell;
+
 
 	inline FrameShell()
 	{
@@ -66,6 +74,11 @@ public:
 		statistics_outlierResOnThis=statistics_goodResOnThis=0;
 		trackingRef=0;
 		camToTrackingRef = SE3();
+
+        // imu
+        velocity = Vec3::Zero();
+        bias_g = Vec3::Zero();
+        bias_a = Vec3::Zero();
 	}
 };
 

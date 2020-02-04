@@ -21,7 +21,6 @@
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "trace_code.h"
 /*
  * KFBuffer.cpp
  *
@@ -53,6 +52,10 @@
 #include "IOWrapper/Output3DWrapper.h"
 
 #include "util/ImageAndExposure.h"
+#include "util/my_setting.h"
+
+//#include "sophus/se3.h"
+//#include "sophus/so3.h"
 
 #include <cmath>
 
@@ -151,12 +154,16 @@ FullSystem::FullSystem()
 
 	lastCoarseRMSE.setConstant(100);
 
+
 	currentMinActDist=2;
 	initialized=false;
 
 
 	ef = new EnergyFunctional();
 	ef->red = &this->treadReduce;
+
+    is_first_image = true;  // add at 2020.1.31
+    imu_intialized = false;
 
 	isLost=false;
 	initFailed=false;
@@ -293,6 +300,8 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 		for(unsigned int i=0;i<lastF_2_fh_tries.size();i++) lastF_2_fh_tries.push_back(SE3());
 	else
 	{
+        std::cout << "tracking using frame" << lastF->shell->id << "\n";
+
 		FrameShell* slast = allFrameHistory[allFrameHistory.size()-2];
 		FrameShell* sprelast = allFrameHistory[allFrameHistory.size()-3];
 		SE3 slast_2_sprelast;
@@ -378,23 +387,23 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 				achievedRes);	// in each level has to be at least as good as the last try.
 		tryIterations++;
 
-		if(i != 0)
-		{
-			printf("RE-TRACK ATTEMPT %d with initOption %d and start-lvl %d (ab %f %f): %f %f %f %f %f -> %f %f %f %f %f \n",
-					i,
-					i, pyrLevelsUsed-1,
-					aff_g2l_this.a,aff_g2l_this.b,
-					achievedRes[0],
-					achievedRes[1],
-					achievedRes[2],
-					achievedRes[3],
-					achievedRes[4],
-					coarseTracker->lastResiduals[0],
-					coarseTracker->lastResiduals[1],
-					coarseTracker->lastResiduals[2],
-					coarseTracker->lastResiduals[3],
-					coarseTracker->lastResiduals[4]);
-		}
+//		if(i != 0)
+//		{
+//			printf("RE-TRACK ATTEMPT %d with initOption %d and start-lvl %d (ab %f %f): %f %f %f %f %f -> %f %f %f %f %f \n",
+//					i,
+//					i, pyrLevelsUsed-1,
+//					aff_g2l_this.a,aff_g2l_this.b,
+//					achievedRes[0],
+//					achievedRes[1],
+//					achievedRes[2],
+//					achievedRes[3],
+//					achievedRes[4],
+//					coarseTracker->lastResiduals[0],
+//					coarseTracker->lastResiduals[1],
+//					coarseTracker->lastResiduals[2],
+//					coarseTracker->lastResiduals[3],
+//					coarseTracker->lastResiduals[4]);
+//		}
 
 
 		// do we have a new winner?
@@ -465,7 +474,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 	return Vec4(achievedRes[0], flowVecs[0], flowVecs[1], flowVecs[2]);
 }
 
-Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
+Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
 {
 
     assert(allFrameHistory.size() > 0);
@@ -475,11 +484,6 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
         ow->pushLiveFrame(fh);
     }
 
-
-#if TRACE_CODE_MODE
-  std::cout << "trackNewCoarse" << "\t"
-               <<"fh->shell->id  " << fh->shell->id << std::endl;
-#endif
     /// set last reference keyframe
     FrameHessian* lastF = coarseTracker->lastRef;
     AffLight aff_last_2_l = AffLight(0,0);
@@ -491,110 +495,100 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
         // static model
         lastF_2_fh_tries.push_back(SE3(Eigen::Matrix<double, 3, 3>::Identity(), Eigen::Matrix<double, 3, 1>::Zero()));
 
-        // tons of motion prior
-        for(float rotDelta=0.02; rotDelta < 0.05; rotDelta++)
-        {
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,0,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,rotDelta,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,0,rotDelta), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,0,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,-rotDelta,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,0,-rotDelta), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,0,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,0,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,0,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,0,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,0,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-        }
-
         /// set tracking reference for second frame(id = 1)
-        /// std::cout <<  "lastF" <<  lastF->shell->id;
         coarseTracker->makeK(&Hcalib);
         coarseTracker->setCoarseTrackingRefForSecondFrame(frameHessians);
         lastF = coarseTracker->lastRef;
 
         // copy keyframe depth
         fh->fh_depth = depth_image->getClone();
-//        std::cout <<  "lastF id => " <<  lastF->shell->id;
     }
 
 
     // for frame after second frame (id=2)
     else
     {
-        FrameShell* slast = allFrameHistory[allFrameHistory.size()-2];
-        FrameShell* sprelast = allFrameHistory[allFrameHistory.size()-3];
-        SE3 slast_2_sprelast;
-        SE3 lastF_2_slast;
-        {	// lock on global pose consistency!
-            boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
-            slast_2_sprelast = sprelast->camToWorld.inverse() * slast->camToWorld;
-            lastF_2_slast = slast->camToWorld.inverse() * lastF->shell->camToWorld;
-            aff_last_2_l = slast->aff_g2l;
-        }
-        SE3 fh_2_slast = slast_2_sprelast;// assumed to be the same as fh_2_slast.
-
-
-        // get last delta-movement.
-        lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast);	// assume constant motion.
-        lastF_2_fh_tries.push_back(fh_2_slast.inverse() * fh_2_slast.inverse() * lastF_2_slast);	// assume double motion (frame skipped)
-        lastF_2_fh_tries.push_back(SE3::exp(fh_2_slast.log()*0.5).inverse() * lastF_2_slast); // assume half motion.
-        lastF_2_fh_tries.push_back(lastF_2_slast); // assume zero motion.
-        lastF_2_fh_tries.push_back(SE3()); // assume zero motion FROM KF.
-
-
-        // just try a TON of different initializations (all rotations). In the end,
-        // if they don't work they will only be tried on the coarsest level, which is super fast anyway.
-        // also, if tracking rails here we loose, so we really, really want to avoid that.
-        for(float rotDelta=0.02; rotDelta < 0.05; rotDelta++)
+        if(setting_IMU_motion_prior)
         {
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,0,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,rotDelta,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,0,rotDelta), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,0,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,-rotDelta,0), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,0,-rotDelta), Vec3(0,0,0)));			// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,0,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,0,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,0,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,0,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
-            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
-        }
+            FrameShell* slast = allFrameHistory[allFrameHistory.size()-2];  // last frame
 
-        if(!slast->poseValid || !sprelast->poseValid || !lastF->shell->poseValid)
+            // ** TODO : frame transform (DSO:camera)
+            coarseTracker->predictMotionPrior(slast, lastF, dt, angular_vel, linear_acc);
+            Mat33 fh_rotation = coarseTracker->imuIntegrator->get_R_prior();  // current tracking frame rotation prior
+            Vec3 fh_translation = coarseTracker->imuIntegrator->get_t_prior(); // current tracking frame translation prior
+            SE3 fh_motion_prior = SE3(fh_rotation, fh_translation); // current tracking frame prior
+            SE3 lastKF_2_fh = lastF->shell->camToWorld * fh_motion_prior.inverse();
+            lastF_2_fh_tries.push_back(lastKF_2_fh); // lastKF to current frame (relative pose)
+
+            if(!lastF->shell->poseValid)
+            {
+                lastF_2_fh_tries.clear();
+                lastF_2_fh_tries.push_back(SE3());
+            }
+
+
+        }
+        else
         {
-            lastF_2_fh_tries.clear();
-            lastF_2_fh_tries.push_back(SE3());
+            FrameShell* slast = allFrameHistory[allFrameHistory.size()-2];
+            FrameShell* sprelast = allFrameHistory[allFrameHistory.size()-3];
+            SE3 slast_2_sprelast;
+            SE3 lastF_2_slast;
+            {	// lock on global pose consistency!
+                boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
+                slast_2_sprelast = sprelast->camToWorld.inverse() * slast->camToWorld;
+                lastF_2_slast = slast->camToWorld.inverse() * lastF->shell->camToWorld;
+                aff_last_2_l = slast->aff_g2l;
+            }
+            SE3 fh_2_slast = slast_2_sprelast;// assumed to be the same as fh_2_slast.
+
+
+            // get last delta-movement.
+            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast);	// assume constant motion.
+            lastF_2_fh_tries.push_back(fh_2_slast.inverse() * fh_2_slast.inverse() * lastF_2_slast);	// assume double motion (frame skipped)
+            lastF_2_fh_tries.push_back(SE3::exp(fh_2_slast.log()*0.5).inverse() * lastF_2_slast); // assume half motion.
+            lastF_2_fh_tries.push_back(lastF_2_slast); // assume zero motion.
+            lastF_2_fh_tries.push_back(SE3()); // assume zero motion FROM KF.
+
+
+            // just try a TON of different initializations (all rotations). In the end,
+            // if they don't work they will only be tried on the coarsest level, which is super fast anyway.
+            // also, if tracking rails here we loose, so we really, really want to avoid that.
+            for(float rotDelta=0.02; rotDelta < 0.05; rotDelta++)
+            {
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,0,0), Vec3(0,0,0)));			// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,rotDelta,0), Vec3(0,0,0)));			// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,0,rotDelta), Vec3(0,0,0)));			// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,0,0), Vec3(0,0,0)));			// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,-rotDelta,0), Vec3(0,0,0)));			// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,0,-rotDelta), Vec3(0,0,0)));			// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,0,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,0,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,0,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,0), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,0,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,-rotDelta,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,-rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,-rotDelta), Vec3(0,0,0)));	// assume constant motion.
+                lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,rotDelta,rotDelta), Vec3(0,0,0)));	// assume constant motion.
+            }
+
+            if(!slast->poseValid || !sprelast->poseValid || !lastF->shell->poseValid)
+            {
+                lastF_2_fh_tries.clear();
+                lastF_2_fh_tries.push_back(SE3());
+            }
         }
     }
 
@@ -616,15 +610,19 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
         AffLight aff_g2l_this = aff_last_2_l;
         SE3 lastF_2_fh_this = lastF_2_fh_tries[i];
         // do front-end tracking
-#if TRACE_CODE_MODE
-  std::cout << "do front end" << "\t"
-               <<"fh->shell->id  " << fh->shell->id << std::endl;
-#endif
+
+//  std::cout << "do front end" << "\t"
+//               <<"fh->shell->id  " << fh->shell->id << std::endl;
+//  std::cout << "lastKF_2_fh before " << lastF_2_fh_this.translation().transpose() << "\n";
+
         bool trackingIsGood = coarseTracker->trackNewestCoarse(
                 fh, lastF_2_fh_this, aff_g2l_this,
                 pyrLevelsUsed-1,
                 achievedRes);	// in each level has to be at least as good as the last try.
         tryIterations++;
+//        std::cout << "trackingIsGood " << trackingIsGood << "\n";
+
+//        std::cout << "lastKF_2_fh after " << lastF_2_fh_this.translation().transpose() << "\n";
 
         if(i != 0)
         {
@@ -652,6 +650,9 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image)
             aff_g2l = aff_g2l_this;
             lastF_2_fh = lastF_2_fh_this;
             haveOneGood = true;
+
+//            std::cout << "haveOneGood" << haveOneGood << "\n";
+
         }
 
         // take over achieved res (always).
@@ -1176,96 +1177,174 @@ void FullSystem::addActiveFrame(ImageAndExposure* image, int id) /// 1. all new 
     }
 }
 
-void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id)
+void FullSystem::initializeGravityAndBias(Vec3 sum_angular_vel, Vec3 sum_linear_acc, int buffer_size)
 {
+    // init gyro bias
+    coarseInitializer->initial_gyro_bias = sum_angular_vel / buffer_size;
+    std::cout << "initial gyro bias :" << coarseInitializer->initial_gyro_bias.transpose() << "\n";
 
-    if(isLost) return;
+    // init accel bias
+    coarseInitializer->initial_accel_bias = Vec3::Zero();
+    std::cout << "initial accel bias :" << coarseInitializer->initial_accel_bias.transpose() << "\n";
 
-	boost::unique_lock<boost::mutex> lock(trackMutex);
+    // init the inital orientation that makes the estimation pose aligned with the world frame
+    Vec3 gravity_imu = sum_linear_acc / buffer_size; // gravity in the IMU frame
+    std::cout << "gravity_imu :" << gravity_imu.transpose() << "\n";
 
+    double gravity_norm = gravity_imu.norm();
+
+    Vec3 gravity_cam = /*T_ic.inverse().rotationMatrix() **/ gravity_imu;
+    Vec3 gravity = Vec3(0.0, 0.0, - gravity_norm);  // gravity in the world frame
+
+    gravity_positive = - gravity;
+
+    Sophus::Quaterniond q_w_c0 = Sophus::Quaterniond::FromTwoVectors(gravity_cam,  - gravity);
+//    q_w_c0 = q_w_c0 * rotation_vector;
+    coarseInitializer->inital_pose = SE3(q_w_c0, Vec3::Zero());
+
+
+    // set flag
+    imu_intialized = true;
+}
+
+
+
+void FullSystem::initializeVisual(ImageAndExposure* image, MinimalImageB16* depth_image, int id)
+{
     // =========================== add into allFrameHistory =========================
-	FrameHessian* fh = new FrameHessian();
-	FrameShell* shell = new FrameShell();
-	shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
-	shell->aff_g2l = AffLight(0,0);
+    FrameHessian* fh = new FrameHessian();
+    FrameShell* shell = new FrameShell();
+    shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
+    shell->aff_g2l = AffLight(0,0);
     shell->marginalizedAt = shell->id = allFrameHistory.size();
     shell->timestamp = image->timestamp;
     shell->incoming_id = id;
     fh->shell = shell;
-	allFrameHistory.push_back(shell);
-
-    // depth image
-//    current_frame_depth_img = depth_image;
+    allFrameHistory.push_back(shell);
 
 
 
-	// =========================== make Images / derivatives etc. =========================
-	fh->ab_exposure = image->exposure_time;
+    // =========================== make Images / derivatives etc. =========================
+    fh->ab_exposure = image->exposure_time;
+    fh->makeImages(image->image, &Hcalib);
+
+    if(coarseInitializer->frameID < 0)	// first frame set. fh is kept by coarseInitializer.
+    {
+        coarseInitializer->setFirstRGBD(&Hcalib, fh, depth_image);
+        is_first_image = false;
+        initialized = true;
+    }
+}
+
+//void FullSystem::predictMotionPrior(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
+//{
+//    if(allFrameHistory.size() == 1) return;
+
+//    // use last frame for more accurate pose and velocity
+////    std::cout << "last frame id :" << lastF->id << "\n";
+//    // use bias of lastest keyframe since bias only get updated in KF
+
+////    std::cout << "last key frame id :" << lastKF->shell->id << "\n";
+
+//    SE3 lastF_pose  = lastF->camToWorld;
+//    Vec3 lastF_vel  = lastF->velocity;
+////    std::cout << "lastF->velocity:" << lastF->velocity.transpose() << "\n";
+//    Vec3 lastKF_gyro_bias = lastKF->bias_g;
+////    std::cout << "lastKF->bias_g :" << lastKF->bias_g.transpose() << "\n";
+//    Vec3 lastKF_acc_bias  = lastKF->bias_a;
+////    Vec3 gravity = - coarseInitializer->gravity;
+
+//    coarseTracker->imuIntegrator->setPredictReference(lastF_pose, lastF_vel, lastKF_gyro_bias, lastKF_acc_bias);
+
+//    for(int i = 0; i < dt.size(); i++)
+//    {
+//        coarseTracker->imuIntegrator->predict(dt[i], angular_vel[i], linear_acc[i]);
+//    }
+//}
+
+//void FullSystem::caculateIMUfactor(const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
+//{
+////    coarseTracker->imuPreintegrator->
+//}
+
+void FullSystem::trackingFrontEnd(ImageAndExposure *image, MinimalImageB16 *depth_image, int id, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
+{
+    if(isLost) return;
+
+    boost::unique_lock<boost::mutex> lock(trackMutex);
+
+    // =========================== add into allFrameHistory =========================
+    FrameHessian* fh = new FrameHessian();
+    FrameShell* shell = new FrameShell();
+    shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
+    shell->aff_g2l = AffLight(0,0);
+    shell->marginalizedAt = shell->id = allFrameHistory.size();
+    shell->timestamp = image->timestamp;
+    shell->incoming_id = id;
+    fh->shell = shell;
+    allFrameHistory.push_back(shell);
+
+    // ========================== VIO : keep bias constant between keyframes ==================
+//    // **TODO** BIAS
+//    fh->bias_g = fh->shell->bias_g = coarseTracker->lastRef->bias_g;
+//    fh->bias_a = fh->shell->bias_a = coarseTracker->lastRef->bias_a;
+
+
+
+    // =========================== make Images / derivatives etc. =========================
+    fh->ab_exposure = image->exposure_time;
     fh->makeImages(image->image, &Hcalib);
 
 
-	if(!initialized)
-	{
-        // initalize directly!
-        if(coarseInitializer->frameID < 0)	// first frame set. fh is kept by coarseInitializer.
-		{
-            coarseInitializer->setFirstRGBD(&Hcalib, fh, depth_image);
-            initialized = true;
-		}
-
-		return;
-	}
-	else	// do front-end operation.
-	{
-		// =========================== SWAP tracking reference?. =========================
-		if(coarseTracker_forNewKF->refFrameID > coarseTracker->refFrameID)
-		{
-			boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
+        // do front-end operation.
+    {
+        // =========================== SWAP tracking reference?. =========================
+        if(coarseTracker_forNewKF->refFrameID > coarseTracker->refFrameID)
+        {
+            boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
             CoarseTracker* tmp = coarseTracker;
             coarseTracker=coarseTracker_forNewKF;
             coarseTracker_forNewKF=tmp;
-		}
+        }
 
-        Vec4 tres = trackNewCoarse(fh, depth_image);
+        std::cout << "tracking id : " << id << "\n";
+        Vec4 tres = trackNewCoarse(fh, depth_image, dt, angular_vel, linear_acc);
 
-		if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
+        if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
         {
             printf("Initial Tracking failed: LOST!\n");
-			isLost=true;
+            isLost=true;
             return;
         }
 
-		bool needToMakeKF = false;
-		if(setting_keyframesPerSecond > 0)
-		{
-			needToMakeKF = allFrameHistory.size()== 1 ||
-					(fh->shell->timestamp - allKeyFramesHistory.back()->timestamp) > 0.95f/setting_keyframesPerSecond;
-		}
-		else
-		{
-			Vec2 refToFh=AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
-					coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
+        bool needToMakeKF = false;
+        if(setting_keyframesPerSecond > 0)
+        {
+            needToMakeKF = allFrameHistory.size()== 1 ||
+                    (fh->shell->timestamp - allKeyFramesHistory.back()->timestamp) > 0.95f/setting_keyframesPerSecond;
+        }
+        else
+        {
+            Vec2 refToFh=AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
+                    coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
 
-			// BRIGHTNESS CHECK
-			needToMakeKF = allFrameHistory.size()== 1 ||
-					setting_kfGlobalWeight*setting_maxShiftWeightT *  sqrtf((double)tres[1]) / (wG[0]+hG[0]) +
-					setting_kfGlobalWeight*setting_maxShiftWeightR *  sqrtf((double)tres[2]) / (wG[0]+hG[0]) +
-					setting_kfGlobalWeight*setting_maxShiftWeightRT * sqrtf((double)tres[3]) / (wG[0]+hG[0]) +
-					setting_kfGlobalWeight*setting_maxAffineWeight * fabs(logf((float)refToFh[0])) > 1 ||
-					2*coarseTracker->firstCoarseRMSE < tres[0];
+            // BRIGHTNESS CHECK
+            needToMakeKF = allFrameHistory.size()== 1 ||
+                    setting_kfGlobalWeight*setting_maxShiftWeightT *  sqrtf((double)tres[1]) / (wG[0]+hG[0]) +
+                    setting_kfGlobalWeight*setting_maxShiftWeightR *  sqrtf((double)tres[2]) / (wG[0]+hG[0]) +
+                    setting_kfGlobalWeight*setting_maxShiftWeightRT * sqrtf((double)tres[3]) / (wG[0]+hG[0]) +
+                    setting_kfGlobalWeight*setting_maxAffineWeight * fabs(logf((float)refToFh[0])) > 1 ||
+                    2*coarseTracker->firstCoarseRMSE < tres[0];
 
-		}
+        }
 
         for(IOWrap::Output3DWrapper* ow : outputWrapper)
             ow->publishCamPose(fh->shell, &Hcalib);
 
-		lock.unlock();
-#if TRACE_CODE_MODE
-  std::cout << "deliverTrackedFrame1" << std::endl;
-#endif
+        lock.unlock();
 
+        // copy depth image for back-end depth matching
       if(needToMakeKF){
-//          std::cout << "clone fh=>" << fh->shell->id << std::endl;
 
           if(linearizeOperation){
 
@@ -1277,37 +1356,141 @@ void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_i
           }
        }
 
+        deliverTrackedFrame(fh, needToMakeKF);
 
-//    if(needToMakeKF){
-//        if(linearizeOperation){
-//            std::cout << "clone fh=>" << fh->shell->id << std::endl;
-
-//            fh->fh_depth = depth_image;
-//        }
-//        else{
-//            static int skipCNT = 1;
-//            if(makeKeyFrameBusy && skipCNT < SKIPMAX ){
-//                std::cout << "busy making key frame. skip clone fh=>" << fh->shell->id << "\n";
-//                skipCNT++;
-//            }
-//            else{
-//                std::cout << "clone fh=>" << fh->shell->id << std::endl;
-
-//                fh->fh_depth = depth_image->getClone();
-//                skipCNT = 1;
-//            }
-//        }
-//     }
-
-
-		deliverTrackedFrame(fh, needToMakeKF);
-        #if TRACE_CODE_MODE
-          std::cout << "deliverTrackedFrame2" << std::endl;
-        #endif
-
-		return;
-	}
+        return;
+    }
 }
+
+//void FullSystem::addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id)
+//{
+
+//    if(isLost) return;
+
+//	boost::unique_lock<boost::mutex> lock(trackMutex);
+
+//    // =========================== add into allFrameHistory =========================
+//	FrameHessian* fh = new FrameHessian();
+//	FrameShell* shell = new FrameShell();
+//	shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
+//	shell->aff_g2l = AffLight(0,0);
+//    shell->marginalizedAt = shell->id = allFrameHistory.size();
+//    shell->timestamp = image->timestamp;
+//    shell->incoming_id = id;
+//    fh->shell = shell;
+//	allFrameHistory.push_back(shell);
+
+
+
+//	// =========================== make Images / derivatives etc. =========================
+//	fh->ab_exposure = image->exposure_time;
+//    fh->makeImages(image->image, &Hcalib);
+
+
+//	if(!initialized)
+//	{
+//        // initalize directly!
+//        if(coarseInitializer->frameID < 0)	// first frame set. fh is kept by coarseInitializer.
+//		{
+//            coarseInitializer->setFirstRGBD(&Hcalib, fh, depth_image);
+//            initialized = true;
+//		}
+
+//		return;
+//	}
+//	else	// do front-end operation.
+//	{
+//		// =========================== SWAP tracking reference?. =========================
+//		if(coarseTracker_forNewKF->refFrameID > coarseTracker->refFrameID)
+//		{
+//			boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
+//            CoarseTracker* tmp = coarseTracker;
+//            coarseTracker=coarseTracker_forNewKF;
+//            coarseTracker_forNewKF=tmp;
+//		}
+
+//        Vec4 tres = trackNewCoarse(fh, depth_image);
+
+//		if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
+//        {
+//            printf("Initial Tracking failed: LOST!\n");
+//			isLost=true;
+//            return;
+//        }
+
+//		bool needToMakeKF = false;
+//		if(setting_keyframesPerSecond > 0)
+//		{
+//			needToMakeKF = allFrameHistory.size()== 1 ||
+//					(fh->shell->timestamp - allKeyFramesHistory.back()->timestamp) > 0.95f/setting_keyframesPerSecond;
+//		}
+//		else
+//		{
+//			Vec2 refToFh=AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
+//					coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
+
+//			// BRIGHTNESS CHECK
+//			needToMakeKF = allFrameHistory.size()== 1 ||
+//					setting_kfGlobalWeight*setting_maxShiftWeightT *  sqrtf((double)tres[1]) / (wG[0]+hG[0]) +
+//					setting_kfGlobalWeight*setting_maxShiftWeightR *  sqrtf((double)tres[2]) / (wG[0]+hG[0]) +
+//					setting_kfGlobalWeight*setting_maxShiftWeightRT * sqrtf((double)tres[3]) / (wG[0]+hG[0]) +
+//					setting_kfGlobalWeight*setting_maxAffineWeight * fabs(logf((float)refToFh[0])) > 1 ||
+//					2*coarseTracker->firstCoarseRMSE < tres[0];
+
+//		}
+
+//        for(IOWrap::Output3DWrapper* ow : outputWrapper)
+//            ow->publishCamPose(fh->shell, &Hcalib);
+
+//		lock.unlock();
+//#if TRACE_CODE_MODE
+//  std::cout << "deliverTrackedFrame1" << std::endl;
+//#endif
+
+//      if(needToMakeKF){
+////          std::cout << "clone fh=>" << fh->shell->id << std::endl;
+
+//          if(linearizeOperation){
+
+//              fh->fh_depth = depth_image;
+//          }
+//          else{
+//              // need to copy to garantee thread safe
+//              fh->fh_depth = depth_image->getClone();
+//          }
+//       }
+
+
+////    if(needToMakeKF){
+////        if(linearizeOperation){
+////            std::cout << "clone fh=>" << fh->shell->id << std::endl;
+
+////            fh->fh_depth = depth_image;
+////        }
+////        else{
+////            static int skipCNT = 1;
+////            if(makeKeyFrameBusy && skipCNT < SKIPMAX ){
+////                std::cout << "busy making key frame. skip clone fh=>" << fh->shell->id << "\n";
+////                skipCNT++;
+////            }
+////            else{
+////                std::cout << "clone fh=>" << fh->shell->id << std::endl;
+
+////                fh->fh_depth = depth_image->getClone();
+////                skipCNT = 1;
+////            }
+////        }
+////     }
+
+
+//		deliverTrackedFrame(fh, needToMakeKF);
+//        #if TRACE_CODE_MODE
+//          std::cout << "deliverTrackedFrame2" << std::endl;
+//        #endif
+
+//		return;
+//	}
+//}
 
 void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
 {
@@ -1562,6 +1745,7 @@ void FullSystem::makeKeyFrame(FrameHessian* fh)
 		coarseTracker_forNewKF->makeK(&Hcalib);
 		coarseTracker_forNewKF->setCoarseTrackingRef(frameHessians);
 
+        coarseTracker_forNewKF->debugPlotDepthSourse(outputWrapper);
         coarseTracker_forNewKF->debugPlotIDepthMap(&minIdJetVisTracker, &maxIdJetVisTracker, outputWrapper);
         coarseTracker_forNewKF->debugPlotIDepthMapFloat(outputWrapper);
 	}
@@ -1678,7 +1862,7 @@ void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalIma
         if(!std::isfinite(ipt->energyTH)) { delete ipt; continue; }
 
         // check if there is idepth from depth camera   /**TODO** +0.5?*/
-        const ImmaturePointStatus ptTraceRGBDstatus = ipt->traceRGBD(depth_img, point->u, point->v);
+        const ImmaturePointStatus ptTraceRGBDstatus = ipt->traceDepth(depth_img, point->u, point->v);
 
         if(ptTraceRGBDstatus == ImmaturePointStatus::IPS_GOOD){
             /* TODO *  asign min/max even if there is depth from camera, since we may traceOn this points too, not sure*/
@@ -1718,7 +1902,7 @@ void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalIma
     // really no lock required, as we are initializing.
     {
         boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
-        firstFrame->shell->camToWorld = SE3();  // set first frame as world frame
+        firstFrame->shell->camToWorld = coarseInitializer->inital_pose;//SE3();  // set first frame as world frame
         firstFrame->shell->aff_g2l = AffLight(0,0);
         firstFrame->setEvalPT_scaled(firstFrame->shell->camToWorld.inverse(),firstFrame->shell->aff_g2l);
         firstFrame->shell->trackingRef=0;
@@ -1729,10 +1913,6 @@ void FullSystem::initializeFromSecondFrame(FrameHessian* secondFrame, MinimalIma
         secondFrame->setEvalPT_scaled(secondFrame->shell->camToWorld.inverse(),secondFrame->shell->aff_g2l);
         secondFrame->shell->trackingRef = firstFrame->shell;
         secondFrame->shell->camToTrackingRef = firstToSecond.inverse();
-#if TRACE_CODE_MODE
-  std::cout << "firstFrame->shell->camToWorld " <<firstFrame->shell->camToWorld.matrix3x4() << "\t"
-               <<"newFrame->shell->camToWorld " << secondFrame->shell->camToWorld.matrix3x4()<< std::endl;
-#endif
     }
 
 //    initialized=true;
