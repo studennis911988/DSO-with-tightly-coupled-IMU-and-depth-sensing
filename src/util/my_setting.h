@@ -21,5 +21,4 @@
 
 #define SHOW(x)   std::cout << "------"#x"------" << std::endl << x << std::endl;
 
-#define setting_IMU_motion_prior  0
 #endif // MY_SETTING_H

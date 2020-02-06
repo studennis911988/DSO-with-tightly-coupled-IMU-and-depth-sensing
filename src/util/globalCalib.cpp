@@ -59,9 +59,6 @@ namespace dso
 			wlvl /=2;
 			hlvl /=2;
 			pyrLevelsUsed++;
-#if TRACE_CODE_MODE
-  std::cout << "wlvl" << wlvl << "\t" << "hlvl" << hlvl << "\t" << "pyramid level" << pyrLevelsUsed << std::endl;
-#endif
 		}
 		printf("using pyramid levels 0 to %d. coarsest resolution: %d x %d!\n",
 				pyrLevelsUsed-1, wlvl, hlvl);
@@ -111,9 +108,7 @@ namespace dso
 			fyiG[level] = KiG[level](1,1);
 			cxiG[level] = KiG[level](0,2);
 			cyiG[level] = KiG[level](1,2);
-#if TRACE_CODE_MODE
-  std::cout << "wG[level]" << wG[level] << "\t" << "KG[level]" << KG[level]  << "\n" << "pyramid level " << level << std::endl;
-#endif
+
 		}
 	}
 

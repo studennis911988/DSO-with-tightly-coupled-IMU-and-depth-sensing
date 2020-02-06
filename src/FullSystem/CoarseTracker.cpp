@@ -743,7 +743,12 @@ void CoarseTracker::predictMotionPrior(FrameShell* lastF, FrameHessian* lastKF, 
     }
 }
 
-void CoarseTracker::caculateIMUfactor(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
+/** IMU preintegration for IMU factor in optimization
+ * 1. every time a new frame create, we caculate the IMU factor w.r.t to its reference keyframe
+ * 2. we reset the IMUPreintegrator once  the last keyframe moves on
+ * 3. every frame store the IMU factor w.r.t its keyframe for not only front end tracking but also for backend-optimization
+ */
+void CoarseTracker::caculateIMUfactor(FrameHessian* fh, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
 {
     // reset pre-integrator if reference keyframe changed
     static int lastKF_id = lastKF->shell->id;
@@ -753,13 +758,126 @@ void CoarseTracker::caculateIMUfactor(FrameShell* lastF, FrameHessian* lastKF, c
         lastKF_id = lastKF->shell->id;
     }
 
-    // preintegration term w.r.t reference keyframe
-    imuPreintegrator->propagate(dt, angular_vel, linear_acc);
-
+    for(int i=0; i<dt.size(); i++)
+    {
+        // preintegration term w.r.t reference keyframe
+//        imuPreintegrator->propagate(dt, angular_vel, linear_acc);
+    }
 
     // store in frame shell for keyframe optimization
-
+//    fh->shell
 }
+
+//double CoarseTracker::calcIMUResAndGS(Mat66& H_out, Vec6& b_out, SE3 &refToNew, Vec9& res_PVPhi, double imu_track_weight)
+//{
+//    Mat44 M_DCi = lastRef->shell->camToWorld.matrix();
+//    Mat44 M_WD = T_WD.matrix();
+//    Mat44 M_WB = M_WD*M_DCi*M_WD.inverse()*T_BC.inverse().matrix();
+//    SE3 T_WB(M_WB);
+//    Mat33 R_WB = T_WB.rotationMatrix();
+//    Vec3 t_WB = T_WB.translation();
+
+//    SE3 newToRef = refToNew.inverse();
+//    Mat44 M_DCj = (lastRef->shell->camToWorld * newToRef).matrix();
+//    Mat44 M_WBj = M_WD*M_DCj*M_WD.inverse()*T_BC.inverse().matrix();
+//    SE3 T_WBj(M_WBj);
+//    Mat33 R_WBj = T_WBj.rotationMatrix();
+//    Vec3 t_WBj = T_WBj.translation();
+
+//    H_out = Mat66::Zero();
+//    b_out = Vec6::Zero();
+
+
+
+//    Vec3 so3 = IMU_preintegrator.getJRBiasg()*lastRef->delta_bias_g;
+//    double theta = so3.norm();
+//    Mat33 R_temp = Mat33::Identity();
+//    R_temp = SO3::exp(IMU_preintegrator.getJRBiasg()*lastRef->delta_bias_g).matrix();
+
+//    Mat33 res_R = (IMU_preintegrator.getDeltaR()*R_temp).transpose()*R_WB.transpose()*R_WBj;
+////     LOG(INFO)<<"res_R: \n"<<res_R;
+
+//    Vec3 res_phi = SO3(res_R).log();
+
+//    newFrame->velocity = R_WB*(R_WB.transpose()*(lastRef->velocity+g_w*dt)+
+//         (IMU_preintegrator.getDeltaV()+IMU_preintegrator.getJVBiasa()*lastRef->delta_bias_a+IMU_preintegrator.getJVBiasg()*lastRef->delta_bias_g));
+
+//    newFrame->shell->velocity = newFrame->velocity;
+
+//    Vec3 res_p = R_WB.transpose()*(t_WBj-t_WB-lastRef->velocity*dt-0.5*g_w*dt*dt)-
+//         (IMU_preintegrator.getDeltaP()+IMU_preintegrator.getJPBiasa()*lastRef->delta_bias_a+IMU_preintegrator.getJPBiasg()*lastRef->delta_bias_g);
+
+
+////     LOG(INFO)<<"res_p: "<<res_p.transpose();
+////     exit(1);
+////
+////     LOG(INFO)<<"newFrame->velocity: "<<newFrame->velocity.transpose();
+//    Mat99 Cov = IMU_preintegrator.getCovPVPhi();
+
+////     Vec9 res_PVPhi;
+//    res_PVPhi.block(0,0,3,1) = res_p;
+////     res_PVPhi.block(0,0,3,1) = Vec3::Zero();
+//    res_PVPhi.block(3,0,3,1) = Vec3::Zero();
+//    res_PVPhi.block(6,0,3,1) = res_phi;
+
+//    double res = imu_track_weight*imu_track_weight*res_PVPhi.transpose() * Cov.inverse() * res_PVPhi;
+
+//    Mat33 J_resPhi_phi_j = IMU_preintegrator.JacobianRInv(res_phi);
+//    Mat33 J_resV_v_j = R_WB.transpose();
+//    Mat33 J_resP_p_j = R_WB.transpose()*R_WBj;
+
+
+//    Mat66 J_imu1 = Mat66::Zero();
+//    J_imu1.block(0,0,3,3) = J_resP_p_j;
+//    J_imu1.block(3,3,3,3) = J_resPhi_phi_j;
+////     J_imu1.block(6,6,3,3) = J_resV_v_j;
+//    Mat66 Weight = Mat66::Zero();
+//    Weight.block(0,0,3,3) = Cov.block(0,0,3,3);
+//    Weight.block(3,3,3,3) = Cov.block(6,6,3,3);
+////     Weight.block(6,6,3,3) = Cov.block(3,3,3,3);
+//    Mat66 Weight2 = Mat66::Zero();
+//    for(int i=0;i<6;++i){
+//    Weight2(i,i) = Weight(i,i);
+//    }
+//    Weight = Weight2.inverse();
+//    Weight *=(imu_track_weight*imu_track_weight);
+
+//    Vec6 b_1 = Vec6::Zero();
+//    b_1.block(0,0,3,1) = res_p;
+//    b_1.block(3,0,3,1) = res_phi;
+////     b_1.block(6,0,3,1) = res_v;
+
+//    Mat44 T_temp = T_BC.matrix()*T_WD.matrix()*M_DCj.inverse();
+//    Mat66 J_rel = (-1*Sim3(T_temp).Adj()).block(0,0,6,6);
+
+//    Mat66 J_xi_tw_th = SE3(M_DCi).Adj();
+
+//    Mat66 J_xi_r_l = refToNew.Adj().inverse();
+//    Mat66 J_2 = Mat66::Zero();
+//    /** Jacobian meaning **
+//     * J_2 : residual to relative pose 21 in DSO frame (world2cam)
+//     * J_imu1 : residual to imu pose j (pre-integration)
+//     * J_rel : transform from T_Metric_w_imu to T_Dso_cam_w_ (provide by supplement material)
+//     * J_xi_tw_th : adj that transform absolute pose to relative pose
+//     * J_xi_r_l : transform from right jacobian to left jacobian that match the original DSO update rule
+//     */
+//    J_2 = J_imu1*J_rel*J_xi_tw_th*J_xi_r_l;
+
+//    H_out = J_2.transpose()*Weight*J_2;
+//    b_out = J_2.transpose()*Weight*b_1;
+
+//    H_out.block<6,3>(0,0) *= SCALE_XI_TRANS;
+//    H_out.block<6,3>(0,3) *= SCALE_XI_ROT;
+//    H_out.block<3,6>(0,0) *= SCALE_XI_TRANS;
+//    H_out.block<3,6>(3,0) *= SCALE_XI_ROT;
+////     H_out.block<9,3>(0,6) *= SCALE_V;
+////     H_out.block<3,9>(6,0) *= SCALE_V;
+
+//    b_out.segment<3>(0) *= SCALE_XI_TRANS;
+//    b_out.segment<3>(3) *= SCALE_XI_ROT;
+
+//    return res;
+//}
 
 bool CoarseTracker::trackNewestCoarse(
 		FrameHessian* newFrameHessian,

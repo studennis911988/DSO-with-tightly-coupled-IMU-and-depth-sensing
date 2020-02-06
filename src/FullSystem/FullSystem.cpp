@@ -508,7 +508,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh, MinimalImageB16* depth_image, 
     // for frame after second frame (id=2)
     else
     {
-        if(setting_IMU_motion_prior)
+        if(setting_using_IMU_motion_prior)
         {
             FrameShell* slast = allFrameHistory[allFrameHistory.size()-2];  // last frame
 
@@ -1190,18 +1190,26 @@ void FullSystem::initializeGravityAndBias(Vec3 sum_angular_vel, Vec3 sum_linear_
     // init the inital orientation that makes the estimation pose aligned with the world frame
     Vec3 gravity_imu = sum_linear_acc / buffer_size; // gravity in the IMU frame
     std::cout << "gravity_imu :" << gravity_imu.transpose() << "\n";
-
     double gravity_norm = gravity_imu.norm();
+    std::cout << "gravity_norm :" << gravity_norm << "\n";
 
-    Vec3 gravity_cam = /*T_ic.inverse().rotationMatrix() **/ gravity_imu;
+    Mat33 R_ci;
+    R_ci << 0.0, 0.0,  1.0,
+           -1.0,  0.0, 0.0,
+           0.0,  -1.0,  0.0;
+    SE3 T_ci = SE3(R_ci, Vec3::Zero());
+
     Vec3 gravity = Vec3(0.0, 0.0, - gravity_norm);  // gravity in the world frame
-
     gravity_positive = - gravity;
 
-    Sophus::Quaterniond q_w_c0 = Sophus::Quaterniond::FromTwoVectors(gravity_cam,  - gravity);
-//    q_w_c0 = q_w_c0 * rotation_vector;
-    coarseInitializer->inital_pose = SE3(q_w_c0, Vec3::Zero());
+    Sophus::Quaterniond q_i0_w = Sophus::Quaterniond::FromTwoVectors(gravity_imu,  - gravity);
+    Sophus::Quaterniond q_c_i = Sophus::Quaterniond(R_ci);
+    Sophus::Quaterniond q_c0_w = q_i0_w * q_c_i;
 
+    coarseInitializer->inital_pose = SE3(q_c0_w, Vec3::Zero());
+
+    // DSO frame is align with world frame since we align it in inialization
+    T_WD = SE3(Mat33::Identity(), Vec3::Zero());
 
     // set flag
     imu_intialized = true;
@@ -1236,36 +1244,6 @@ void FullSystem::initializeVisual(ImageAndExposure* image, MinimalImageB16* dept
     }
 }
 
-//void FullSystem::predictMotionPrior(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
-//{
-//    if(allFrameHistory.size() == 1) return;
-
-//    // use last frame for more accurate pose and velocity
-////    std::cout << "last frame id :" << lastF->id << "\n";
-//    // use bias of lastest keyframe since bias only get updated in KF
-
-////    std::cout << "last key frame id :" << lastKF->shell->id << "\n";
-
-//    SE3 lastF_pose  = lastF->camToWorld;
-//    Vec3 lastF_vel  = lastF->velocity;
-////    std::cout << "lastF->velocity:" << lastF->velocity.transpose() << "\n";
-//    Vec3 lastKF_gyro_bias = lastKF->bias_g;
-////    std::cout << "lastKF->bias_g :" << lastKF->bias_g.transpose() << "\n";
-//    Vec3 lastKF_acc_bias  = lastKF->bias_a;
-////    Vec3 gravity = - coarseInitializer->gravity;
-
-//    coarseTracker->imuIntegrator->setPredictReference(lastF_pose, lastF_vel, lastKF_gyro_bias, lastKF_acc_bias);
-
-//    for(int i = 0; i < dt.size(); i++)
-//    {
-//        coarseTracker->imuIntegrator->predict(dt[i], angular_vel[i], linear_acc[i]);
-//    }
-//}
-
-//void FullSystem::caculateIMUfactor(const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
-//{
-////    coarseTracker->imuPreintegrator->
-//}
 
 void FullSystem::trackingFrontEnd(ImageAndExposure *image, MinimalImageB16 *depth_image, int id, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc)
 {

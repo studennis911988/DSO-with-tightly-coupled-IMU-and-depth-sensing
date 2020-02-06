@@ -43,7 +43,6 @@ public:
 
         virtual void publishCamPose(FrameShell* frame, CalibHessian* HCalib) override
         {
-            /** save data **/
             voTrackingPose = frame->camToWorld.matrix3x4();
             voTimestamp = frame->timestamp;
             voId = frame->id;

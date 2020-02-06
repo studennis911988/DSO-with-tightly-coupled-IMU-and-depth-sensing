@@ -18,11 +18,74 @@ namespace dso
 class IMU
 {
 public:
-    inline Mat33 normalizeRotationM (const Mat33& R)
+    // skew-symmetric matrix
+    static Mat33 skew(const Vec3& v)
     {
-        Sophus::Quaterniond qr(R);
-        return normalizeRotationQ(qr).toRotationMatrix();
+        return Sophus::SO3::hat( v );
     }
+
+    // exponential map from Vec3 to mat3x3 (Rodrigues formula)
+    static Mat33 Expmap(const Vec3& v)
+    {
+        return Sophus::SO3::exp(v).matrix();
+    }
+
+    // right jacobian of SO(3)
+    static Mat33 JacobianR(const Vec3& w)
+    {
+        Mat33 Jr = Mat33::Identity();
+        double theta = w.norm();
+        if(theta<0.00001)
+        {
+            return Jr;// = Matrix3d::Identity();
+        }
+        else
+        {
+            Vec3 k = w.normalized();  // k - unit direction vector of w
+            Mat33 K = skew(k);
+//             Jr =   Mat33::Identity()
+//                     - (1-cos(theta))/theta*K
+//                     + (1-sin(theta)/theta)*K*K;
+        Jr = sin(theta)/theta*Mat33::Identity()+(1-sin(theta)/theta)*k*k.transpose()-(1-cos(theta))/theta*K;
+        }
+        return Jr;
+    }
+
+    static Mat33 JacobianRInv(const Vec3& w)
+    {
+        Mat33 Jrinv = Mat33::Identity();
+        double theta = w.norm();
+
+        // very small angle
+        if(theta < 0.00001)
+        {
+            return Jrinv;
+        }
+        else
+        {
+            Vec3 k = w.normalized();  // k - unit direction vector of w
+            Mat33 K = Sophus::SO3::hat(k);
+//             Jrinv = Mat33::Identity()
+//                     + 0.5*Sophus::SO3::hat(w)
+//                     + ( 1.0 - (1.0+cos(theta))*theta / (2.0*sin(theta)) ) *K*K;
+        double cot = cos(theta/2)/sin(theta/2);
+        Jrinv = theta/2*cot*Mat33::Identity()+(1-theta/2*cot)*k*k.transpose()+theta/2*K;
+        }
+
+        return Jrinv;
+    }
+
+    // left jacobian of SO(3), Jl(x) = Jr(-x)
+    static Mat33 JacobianL(const Vec3& w)
+    {
+        return JacobianR(-w);
+    }
+    // left jacobian inverse
+    static Mat33 JacobianLInv(const Vec3& w)
+    {
+        return JacobianRInv(-w);
+    }
+
 
     inline Sophus::Quaterniond normalizeRotationQ(const Sophus::Quaterniond& r)
     {
@@ -34,9 +97,10 @@ public:
         return _r.normalized();
     }
 
-    inline Mat33 Expmap(const Vec3& v)
+    inline Mat33 normalizeRotationM (const Mat33& R)
     {
-        return Sophus::SO3::exp(v).matrix();
+        Sophus::Quaterniond qr(R);
+        return normalizeRotationQ(qr).toRotationMatrix();
     }
 
 };
@@ -185,6 +249,9 @@ private:
 
     // noise covariance for weighting matrix in optimization
     Mat99 cov_P_V_Phi;
+
+    // delta time between last keyframe and new frame
+    double delta_t;
 };
 
 

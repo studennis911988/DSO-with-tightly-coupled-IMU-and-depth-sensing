@@ -206,8 +206,14 @@ extern int staticPattern[10][40][2];
 extern int staticPatternNum[10];
 extern int staticPatternPadding[10];
 
-extern Vec3 gravity_positive;
 
+extern Mat33 GyrCov;
+extern Mat33 AccCov;
+extern Mat33 GyrRandomWalkNoise;
+extern Mat33 AccRandomWalkNoise;
+extern Vec3 gravity_positive;
+extern SE3 T_WD; // DSO frame to Metric world frame, since I'm using Depth, so the scale is observable
+                 // and I didn't include gravity direction in optimization, which will stay when VIO inialized
 
 //#define patternNum staticPatternNum[setting_pattern]
 //#define patternP staticPattern[setting_pattern]
@@ -220,6 +226,7 @@ extern Vec3 gravity_positive;
 
 
 
+#define setting_using_IMU_motion_prior  0
 
 
 

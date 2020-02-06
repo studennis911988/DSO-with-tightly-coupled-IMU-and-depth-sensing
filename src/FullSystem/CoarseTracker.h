@@ -87,7 +87,9 @@ public:
     // imu
     void predictMotionPrior(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
 //    void predictMotionPrior(double dt, const Vec3& angular_vel,  const Vec3& linear_acc); // add 2020.2.3
-    void caculateIMUfactor(FrameShell* lastF, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
+    void caculateIMUfactor(FrameHessian* fh, FrameHessian* lastKF, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
+
+    double calcIMUResAndGS(Mat66& H_out, Vec6& b_out, SE3 &refToNew, Vec9& res_PVPhi, double imu_track_weight);
 
 
     FrameHessian* lastRef;

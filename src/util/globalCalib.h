@@ -44,7 +44,6 @@ namespace dso
     extern Mat33 rgbPixel2depthPixel_rotation;
     extern Vec3  rgbPixel2depthPixel_translation;
 
-//    extern Vec3 gravity;
 
 //    extern Mat33 R_ic;
 //    extern Vec3  t_ic;

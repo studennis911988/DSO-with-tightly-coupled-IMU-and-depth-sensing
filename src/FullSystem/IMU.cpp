@@ -83,6 +83,72 @@ void IMUIntegrator::predict(double dt, const Vec3& gyro_k, const Vec3& acc_k)
 }
 
 IMUPreintegrator::IMUPreintegrator()
+    : delta_P(Vec3::Zero())
+    , delta_V(Vec3::Zero())
+    , delta_R(Mat33::Identity())
+    , J_P_Biasg(Mat33::Identity())
+    , J_P_Biasa(Mat33::Identity())
+    , J_V_Biasg(Mat33::Identity())
+    , J_V_Biasa(Mat33::Identity())
+    , J_R_Biasg(Mat33::Identity())
+    , cov_P_V_Phi(Mat99::Identity())
+    , delta_t(0.0)
 {
+}
 
+void IMUPreintegrator::reset()
+{
+    delta_P.setZero();
+    delta_V.setZero();
+    delta_R.setIdentity();
+    J_P_Biasg.setZero();
+    J_P_Biasa.setZero();
+    J_V_Biasg.setZero();
+    J_V_Biasa.setZero();
+    J_R_Biasg.setZero();
+    cov_P_V_Phi.setZero();  // initial covariance is 0(9x9)
+    delta_t = 0.0;
+}
+
+void IMUPreintegrator::propagate(double dt, const Vec3 &gyro_k, const Vec3 &acc_k)
+{
+    double dt2 = dt*dt;
+
+    Mat33 dR = Expmap(gyro_k*dt);
+    Mat33 Jr = JacobianR(gyro_k*dt);
+
+    // noise covariance propagation of delta measurements
+    // err_k+1 = A*err_k + B*err_gyro + C*err_acc
+    Mat33 I3x3 = Mat33::Identity();
+    Mat99 A = Mat99::Identity();
+    A.block<3,3>(6,6) = dR.transpose();
+    A.block<3,3>(3,6) = -delta_R*skew(acc_k)*dt;
+    A.block<3,3>(0,6) = -0.5*delta_R*skew(acc_k)*dt2;
+    A.block<3,3>(0,3) = I3x3*dt;
+    Mat93 Bg = Mat93::Zero();
+    Bg.block<3,3>(6,0) = Jr*dt;
+    Mat93 Ba = Mat93::Zero();
+    Ba.block<3,3>(3,0) = delta_R*dt;
+    Ba.block<3,3>(0,0) = 0.5*delta_R*dt2;
+    cov_P_V_Phi = A*cov_P_V_Phi*A.transpose() +
+                  Bg*GyrCov*Bg.transpose() +
+                  Ba*AccCov*Ba.transpose();
+
+
+    // jacobian of delta measurements w.r.t bias of gyro/acc
+    // update P first, then V, then R
+    J_P_Biasa += J_V_Biasa*dt - 0.5*delta_R*dt2;
+    J_P_Biasg += J_V_Biasg*dt - 0.5*delta_R*skew(acc_k)*J_R_Biasg*dt2;
+    J_V_Biasa += -delta_R*dt;
+    J_V_Biasg += -delta_R*skew(acc_k)*J_R_Biasg*dt;
+    J_R_Biasg = dR.transpose()*J_R_Biasg - Jr*dt;
+
+    // delta measurements, position/velocity/rotation(matrix)
+    // update P first, then V, then R. beBause P's update need V&R's previous state
+    delta_P += delta_V*dt + 0.5*delta_R*acc_k*dt2;    // P_k+1 = P_k + V_k*dt + R_k*a_k*dt*dt/2
+    delta_V += delta_R*acc_k*dt;
+    delta_R = normalizeRotationM(delta_R*dR);  // normalize rotation, in Base of numeriBal error accumulation
+
+    // delta time
+    delta_t += dt;
 }
