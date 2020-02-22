@@ -78,6 +78,8 @@ public:
 
 	void dropResidual(EFResidual* r);
 	void marginalizeFrame(EFFrame* fh);
+  void marginalizeFrame_imu(EFFrame* fh);
+
 	void removePoint(EFPoint* ph);
 
 
@@ -100,6 +102,14 @@ public:
 
 	MatXX HM;
 	VecX bM;
+
+  MatXX HM_imu;
+  VecX bM_imu;
+
+  MatXX HM_bias;
+  VecX bM_bias;
+
+  double Energy_imu = 0;
 
 	int resInA, resInL, resInM;
 	MatXX lastHS;
@@ -130,8 +140,10 @@ private:
 	void accumulateAF_MT(MatXX &H, VecX &b, bool MT);
 	void accumulateLF_MT(MatXX &H, VecX &b, bool MT);
 	void accumulateSCF_MT(MatXX &H, VecX &b, bool MT);
-
+  void calculateIMUHessian(MatXX &H, VecX &b);
 	void calcLEnergyPt(int min, int max, Vec10* stats, int tid);
+
+  void connectIMUfactor(int idx_marg, int idx_connect2);
 
 	void orthogonalize(VecX* b, MatXX* H);
 	Mat18f* adHTdeltaF;

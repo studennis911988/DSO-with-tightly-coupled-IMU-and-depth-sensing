@@ -41,12 +41,27 @@ public:
             printf("OUT: Destroyed MyOutputWrapper\n");
         }
 
+//        virtual void publishKeyframes(std::vector<FrameHessian*> &frames, bool final, CalibHessian* HCalib) override
+//        {
+//            windowFrame.clear();
+//            for(FrameHessian* f : frames)
+//            {
+//              Vec3 p = f->shell->camToWorld.translation();
+//              windowFrame.emplace_back(p);
+//            }
+//        }
+
         virtual void publishCamPose(FrameShell* frame, CalibHessian* HCalib) override
         {
             voTrackingPose = frame->camToWorld.matrix3x4();
+            velocity = frame->velocity;
+            bias_g = frame->bias_g;
+            bias_a = frame->bias_a;
             voTimestamp = frame->timestamp;
             voId = frame->id;
         }
+
+
 
         virtual void pushDepthImage(MinimalImageB3* image) override
         {
@@ -123,9 +138,15 @@ public:
 public:
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
         // camera pose
-        Eigen::Matrix<double,3,4> voTrackingPose;
+        Mat34 voTrackingPose;
+        Vec3 velocity;
+        Vec3 bias_g;
+        Vec3 bias_a;
         double voTimestamp;
         int voId;
+
+        // keyframe position
+        std::vector<Vec3> windowFrame;
 
         // depth map
         MinimalImageB3* depth_image_ptr;

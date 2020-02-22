@@ -311,12 +311,17 @@ int staticPatternPadding[10] = {
 };
 
 
-Vec4 noise(0.0417809301596, 0.0417026677804, 4e-06, 0.0002);
-Mat33 GyrCov =  Mat33::Identity()*noise(0)*noise(0)/0.005;
-Mat33 AccCov = Mat33::Identity()*noise(1)*noise(1)/0.005;
-Mat33 GyrRandomWalkNoise = Mat33::Identity()*noise(2)*noise(2);
-Mat33 AccRandomWalkNoise = Mat33::Identity()*noise(3)*noise(3);
-Vec3 gravity_positive;
-SE3 T_WD;
-
+SE3 T_BC;
+double G_norm;
+Mat33 GyrCov;
+Mat33 AccCov;
+Mat33 GyrRandomWalkNoise;
+Mat33 AccRandomWalkNoise;
+Sim3 T_WD;
+double imu_weight = 1;
+double imu_weight_tracker = 1;
+bool imu_track_flag = true;
+bool imu_track_ready = false;
+bool imu_use_flag = true;
+double setting_margWeightFac_imu = 0.25;
 }

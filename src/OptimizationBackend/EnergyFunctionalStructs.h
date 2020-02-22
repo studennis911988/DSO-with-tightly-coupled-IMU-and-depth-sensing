@@ -164,6 +164,8 @@ public:
 	int idx;	// idx in frames.
 
 	int frameID;
+  bool m_flag = false;
+
 };
 
 }

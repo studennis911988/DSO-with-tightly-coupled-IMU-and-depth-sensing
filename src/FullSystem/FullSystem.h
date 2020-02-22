@@ -137,7 +137,7 @@ public:
 
 	// adds a new frame, and creates point & residual structs.
     void trackingFrontEnd(ImageAndExposure* image, MinimalImageB16* depth_image, int id, const std::vector<double>& dt, const std::vector<Vec3>& angular_vel,  const std::vector<Vec3>& linear_acc);
-//    void addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
+    void addActiveRGBD(ImageAndExposure* image, MinimalImageB16* depth_image, int id);
     void addActiveFrame(ImageAndExposure* image, int id);
 
     void depthMatching(FrameHessian* frame, MinimalImageB16* depth_image);
@@ -198,8 +198,9 @@ private:
 	void activatePointsOldFirst();
 	void flagPointsForRemoval();
 	void makeNewTraces(FrameHessian* newFrame, float* gtDepth);
-    void initializeFromSecondFrame(FrameHessian* secondFrame, MinimalImageB16* depth_img);
 	void initializeFromInitializer(FrameHessian* newFrame);
+  void initializeFromDepthMaching(MinimalImageB16* depth_img);
+
 	void flagFramesForMarginalization(FrameHessian* newFH);
 
 

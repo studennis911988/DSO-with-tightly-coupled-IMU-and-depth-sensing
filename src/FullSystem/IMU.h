@@ -105,6 +105,35 @@ public:
 
 };
 
+typedef struct {
+    // preintegration term : position/velocity/rotation(matrix)
+    Vec3 delta_P;
+    Vec3 delta_V;
+    Mat33 delta_R;
+
+    // Jacobian of preintegration term w.r.t gyro/acc bias for correction
+    Mat33 J_P_Biasg;
+    Mat33 J_P_Biasa;
+    Mat33 J_V_Biasg;
+    Mat33 J_V_Biasa;
+    Mat33 J_R_Biasg;
+
+    // noise covariance for weighting matrix in optimization
+    Mat99 cov_P_V_Phi;
+
+    // delta time between last keyframe and new frame
+    double delta_t;
+
+}IMU_PreintegrationShell;
+
+
+
+typedef std::pair<int, IMU_PreintegrationShell> IMUfactor;
+
+
+
+
+
 class IMUIntegrator : public IMU
 {
 public:
@@ -122,6 +151,8 @@ public:
 
     // predict motion prior for new frame at tracking
     void predict(double dt, const Vec3& gyro_k,  const Vec3& acc_k);
+
+
 
     // get private class member
     inline Mat33 get_R_prior() const
@@ -181,6 +212,8 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     IMUPreintegrator();
+    IMUPreintegrator(const IMU_PreintegrationShell& factor);
+
     ~IMUPreintegrator();
 
     // reset all state
@@ -189,7 +222,7 @@ public:
     // preintegration for IMU factor
     void propagate(double dt, const Vec3& gyro_k,  const Vec3& acc_k);
 
-    //
+    IMU_PreintegrationShell getFactor();
 
     // delta measurements, position/velocity/rotation(matrix)
     inline Vec3 getDeltaP() const    // P_k+1 = P_k + V_k*dt + R_k*a_k*dt*dt/2
@@ -233,6 +266,16 @@ public:
         return cov_P_V_Phi;
     }
 
+    inline double getDeltat() const
+    {
+        return delta_t;
+    }
+
+    //
+    std::vector<double> dt;
+    std::vector<Vec3> acc;
+    std::vector<Vec3> gyro;
+
 private:
     // preintegration term : position/velocity/rotation(matrix)
     Vec3 delta_P;
@@ -245,18 +288,15 @@ private:
     Mat33 J_V_Biasg;
     Mat33 J_V_Biasa;
     Mat33 J_R_Biasg;
-    Mat33 J_R_Biasa;
 
     // noise covariance for weighting matrix in optimization
     Mat99 cov_P_V_Phi;
 
     // delta time between last keyframe and new frame
     double delta_t;
+
+
 };
-
-
-
-
 
 
 

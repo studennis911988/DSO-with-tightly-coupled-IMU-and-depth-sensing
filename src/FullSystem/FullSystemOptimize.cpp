@@ -252,7 +252,7 @@ bool FullSystem::doStepFromBackup(float stepfacC,float stepfacT,float stepfacR,f
 				sumNID += fabsf(ph->idepth_backup);
 				numID++;
 
-                ph->setIdepthZero(ph->idepth_backup + step);
+        ph->setIdepthZero(ph->idepth_backup + step);
 			}
 		}
 	}
@@ -266,6 +266,15 @@ bool FullSystem::doStepFromBackup(float stepfacC,float stepfacT,float stepfacR,f
 			sumB += fh->step[7]*fh->step[7];
 			sumT += fh->step.segment<3>(0).squaredNorm();
 			sumR += fh->step.segment<3>(3).squaredNorm();
+      if(imu_use_flag)
+      {
+          fh->velocity += stepfacC*fh->step_imu.block(0,0,3,1);
+          fh->delta_bias_g += stepfacC*fh->step_imu.block(3,0,3,1);
+          fh->delta_bias_a += stepfacC*fh->step_imu.block(6,0,3,1);
+          fh->shell->velocity = fh->velocity;
+          fh->shell->delta_bias_g = fh->delta_bias_g;
+          fh->shell->delta_bias_a = fh->delta_bias_a;
+      }
 
 			for(PointHessian* ph : fh->pointHessians)
 			{
@@ -273,8 +282,7 @@ bool FullSystem::doStepFromBackup(float stepfacC,float stepfacT,float stepfacR,f
 				sumID += ph->step*ph->step;
 				sumNID += fabsf(ph->idepth_backup);
 				numID++;
-
-                ph->setIdepthZero(ph->idepth_backup + stepfacD*ph->step);
+        ph->setIdepthZero(ph->idepth_backup + stepfacD*ph->step);
 			}
 		}
 	}
@@ -287,15 +295,6 @@ bool FullSystem::doStepFromBackup(float stepfacC,float stepfacT,float stepfacR,f
 	sumNID /= numID;
 
 
-
-//    if(!setting_debugout_runquiet)
-//        printf("STEPS: A %.1f; B %.1f; R %.1f; T %.1f. \t",
-//                sqrtf(sumA) / (0.0005*setting_thOptIterations),
-//                sqrtf(sumB) / (0.00005*setting_thOptIterations),
-//                sqrtf(sumR) / (0.00005*setting_thOptIterations),
-//                sqrtf(sumT)*sumNID / (0.00005*setting_thOptIterations));
-
-
 	EFDeltaValid=false;
 	setPrecalcValues();
 
@@ -305,9 +304,6 @@ bool FullSystem::doStepFromBackup(float stepfacC,float stepfacT,float stepfacR,f
 			sqrtf(sumB) < 0.00005*setting_thOptIterations &&
 			sqrtf(sumR) < 0.00005*setting_thOptIterations &&
 			sqrtf(sumT)*sumNID < 0.00005*setting_thOptIterations;
-//
-//	printf("mean steps: %f %f %f!\n",
-//			meanStepC, meanStepP, meanStepD);
 }
 
 
@@ -409,20 +405,11 @@ void FullSystem::printOptRes(const Vec3 &res, double resL, double resM, double r
 
 float FullSystem::optimize(int mnumOptIts)
 {
-#if TRACE_CODE_MODE
-  std::cout << "optimize frameHessians.size() =>" << frameHessians.size()  << std::endl;
-#endif
 	if(frameHessians.size() < 2) return 0;
 	if(frameHessians.size() < 3) mnumOptIts = 20;
 	if(frameHessians.size() < 4) mnumOptIts = 15;
 
-
-
-
-
-
 	// get statistics and active residuals.
-
 	activeResiduals.clear();
 	int numPoints = 0;
 	int numLRes = 0;
@@ -459,14 +446,12 @@ float FullSystem::optimize(int mnumOptIts)
 	else
 		applyRes_Reductor(true,0,activeResiduals.size(),0,0);
 
-#if TRACE_CODE_MODE
-  std::cout << "treadReduce.reduce" << std::endl;
-#endif
-    if(!setting_debugout_runquiet)
-    {
-        printf("Initial Error       \t");
-        printOptRes(lastEnergy, lastEnergyL, lastEnergyM, 0, 0, frameHessians.back()->aff_g2l().a, frameHessians.back()->aff_g2l().b);
-    }
+
+  if(!setting_debugout_runquiet)
+  {
+      printf("Initial Error       \t");
+      printOptRes(lastEnergy, lastEnergyL, lastEnergyM, 0, 0, frameHessians.back()->aff_g2l().a, frameHessians.back()->aff_g2l().b);
+  }
 
 	debugPlotTracking();
 
@@ -479,7 +464,6 @@ float FullSystem::optimize(int mnumOptIts)
 	{
 		// solve!
 		backupState(iteration!=0);
-		//solveSystemNew(0);
 		solveSystem(iteration, lambda);
 		double incDirChange = (1e-20 + previousX.dot(ef->lastX)) / (1e-20 + previousX.norm() * ef->lastX.norm());
 		previousX = ef->lastX;
@@ -497,7 +481,8 @@ float FullSystem::optimize(int mnumOptIts)
 
 		bool canbreak = doStepFromBackup(stepsize,stepsize,stepsize,stepsize,stepsize);
 
-
+    std::cout << "Energy old photo: " << lastEnergy(0) << "\t"
+              << "Energy imu: "   << ef->Energy_imu << "\n";
 
 
 
@@ -507,25 +492,25 @@ float FullSystem::optimize(int mnumOptIts)
 		Vec3 newEnergy = linearizeAll(false);
 		double newEnergyL = calcLEnergy();
 		double newEnergyM = calcMEnergy();
+    std::cout << "Energy new photo: " << newEnergy(0) << "\n";
 
 
+    if(!setting_debugout_runquiet)
+    {
+        printf("%s %d (L %.2f, dir %.2f, ss %.1f): \t",
+    (newEnergy[0] +  newEnergy[1] +  newEnergyL + newEnergyM <
+        lastEnergy[0] + lastEnergy[1] + lastEnergyL + lastEnergyM) ? "ACCEPT" : "REJECT",
+    iteration,
+    log10(lambda),
+    incDirChange,
+    stepsize);
+        printOptRes(newEnergy, newEnergyL, newEnergyM , 0, 0, frameHessians.back()->aff_g2l().a, frameHessians.back()->aff_g2l().b);
+    }
 
-
-        if(!setting_debugout_runquiet)
-        {
-            printf("%s %d (L %.2f, dir %.2f, ss %.1f): \t",
-				(newEnergy[0] +  newEnergy[1] +  newEnergyL + newEnergyM <
-						lastEnergy[0] + lastEnergy[1] + lastEnergyL + lastEnergyM) ? "ACCEPT" : "REJECT",
-				iteration,
-				log10(lambda),
-				incDirChange,
-				stepsize);
-            printOptRes(newEnergy, newEnergyL, newEnergyM , 0, 0, frameHessians.back()->aff_g2l().a, frameHessians.back()->aff_g2l().b);
-        }
-
-		if(setting_forceAceptStep || (newEnergy[0] +  newEnergy[1] +  newEnergyL + newEnergyM <
-				lastEnergy[0] + lastEnergy[1] + lastEnergyL + lastEnergyM))
-		{
+//		if(setting_forceAceptStep || (newEnergy[0] +  newEnergy[1] +  newEnergyL + newEnergyM <
+//				lastEnergy[0] + lastEnergy[1] + lastEnergyL + lastEnergyM))
+    if(setting_forceAceptStep || newEnergy[0] < lastEnergy[0])
+    {
 
 			if(multiThreading)
 				treadReduce.reduce(boost::bind(&FullSystem::applyRes_Reductor, this, true, _1, _2, _3, _4), 0, activeResiduals.size(), 50);

@@ -36,7 +36,7 @@ void IMUIntegrator::setPredictReference(const SE3& T_k_1, const Vec3 v_k_1, cons
     v_prior = v_k_1;
     gyro_b = gyro_bias;
     acc_b  = acc_bias;
-    g = gravity_positive;
+    g = Vec3(0,0,G_norm);
 
 //    SHOW(R_prior)
 //    SHOW(t_prior.transpose())
@@ -86,14 +86,33 @@ IMUPreintegrator::IMUPreintegrator()
     : delta_P(Vec3::Zero())
     , delta_V(Vec3::Zero())
     , delta_R(Mat33::Identity())
-    , J_P_Biasg(Mat33::Identity())
-    , J_P_Biasa(Mat33::Identity())
-    , J_V_Biasg(Mat33::Identity())
-    , J_V_Biasa(Mat33::Identity())
-    , J_R_Biasg(Mat33::Identity())
-    , cov_P_V_Phi(Mat99::Identity())
+    , J_P_Biasg(Mat33::Zero())
+    , J_P_Biasa(Mat33::Zero())
+    , J_V_Biasg(Mat33::Zero())
+    , J_V_Biasa(Mat33::Zero())
+    , J_R_Biasg(Mat33::Zero())
+    , cov_P_V_Phi(Mat99::Zero())
     , delta_t(0.0)
 {
+}
+
+IMUPreintegrator::IMUPreintegrator(const IMU_PreintegrationShell& factor)
+    : delta_P(factor.delta_P)
+    , delta_V(factor.delta_V)
+    , delta_R(factor.delta_R)
+    , J_P_Biasg(factor.J_P_Biasg)
+    , J_P_Biasa(factor.J_P_Biasa)
+    , J_V_Biasg(factor.J_V_Biasg)
+    , J_V_Biasa(factor.J_V_Biasa)
+    , J_R_Biasg(factor.J_R_Biasg)
+    , cov_P_V_Phi(factor.cov_P_V_Phi)
+    , delta_t(factor.delta_t)
+{
+}
+
+IMUPreintegrator::~IMUPreintegrator()
+{
+
 }
 
 void IMUPreintegrator::reset()
@@ -108,6 +127,9 @@ void IMUPreintegrator::reset()
     J_R_Biasg.setZero();
     cov_P_V_Phi.setZero();  // initial covariance is 0(9x9)
     delta_t = 0.0;
+    dt.clear();
+    gyro.clear();
+    acc.clear();
 }
 
 void IMUPreintegrator::propagate(double dt, const Vec3 &gyro_k, const Vec3 &acc_k)
@@ -130,10 +152,7 @@ void IMUPreintegrator::propagate(double dt, const Vec3 &gyro_k, const Vec3 &acc_
     Mat93 Ba = Mat93::Zero();
     Ba.block<3,3>(3,0) = delta_R*dt;
     Ba.block<3,3>(0,0) = 0.5*delta_R*dt2;
-    cov_P_V_Phi = A*cov_P_V_Phi*A.transpose() +
-                  Bg*GyrCov*Bg.transpose() +
-                  Ba*AccCov*Ba.transpose();
-
+    cov_P_V_Phi = A*cov_P_V_Phi*A.transpose() + Bg*GyrCov*Bg.transpose() + Ba*AccCov*Ba.transpose();
 
     // jacobian of delta measurements w.r.t bias of gyro/acc
     // update P first, then V, then R
@@ -152,3 +171,21 @@ void IMUPreintegrator::propagate(double dt, const Vec3 &gyro_k, const Vec3 &acc_
     // delta time
     delta_t += dt;
 }
+
+IMU_PreintegrationShell IMUPreintegrator::getFactor()
+{
+  IMU_PreintegrationShell factor;
+  factor.delta_P = this->delta_P;
+  factor.delta_V = this->delta_V;
+  factor.delta_R = this->delta_R;
+  factor.J_P_Biasg = this->J_P_Biasg;
+  factor.J_P_Biasa = this->J_P_Biasa;
+  factor.J_V_Biasg = this->J_V_Biasg;
+  factor.J_V_Biasa = this->J_V_Biasa;
+  factor.J_R_Biasg = this->J_R_Biasg;
+  factor.cov_P_V_Phi = this->cov_P_V_Phi;
+  factor.delta_t = this->delta_t;
+
+  return factor;
+}
+

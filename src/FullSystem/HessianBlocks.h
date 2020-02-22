@@ -112,7 +112,7 @@ struct FrameHessian
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 	EFFrame* efFrame;
 
-    MinimalImageB16* fh_depth = nullptr;
+  MinimalImageB16* fh_depth = nullptr;
 
 	// constant info & pre-calculated values
 	//DepthImageWrap* frame;
@@ -157,11 +157,13 @@ struct FrameHessian
 	Vec10 state_backup;
 
     // IMU
-    Vec3 velocity;
-    Vec3 bias_g;
-    Vec3 bias_a;
-    Vec3 delta_bias_g;  // gyro bias update value ( for preintegration correction)
-    Vec3 delta_bias_a;  //according to pre-integration, when bias is updated, pre-integration should also be updated using
+  Vec9 step_imu = Vec9::Zero();
+
+    Vec3 velocity = Vec3::Zero();
+    Vec3 bias_g = Vec3::Zero();
+    Vec3 bias_a = Vec3::Zero();
+    Vec3 delta_bias_g = Vec3::Zero();  // gyro bias update value ( for preintegration correction)
+    Vec3 delta_bias_a = Vec3::Zero();  //according to pre-integration, when bias is updated, pre-integration should also be updated using
                         //* first-order expansion of ba and bg
 
 

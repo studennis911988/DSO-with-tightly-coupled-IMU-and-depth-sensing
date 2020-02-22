@@ -26,6 +26,7 @@
 
 #include "util/NumType.h"
 #include "algorithm"
+#include "FullSystem/IMU.h"
 
 namespace dso
 {
@@ -54,13 +55,19 @@ public:
 	int marginalizedAt;
 	double movedByOpt;
 
-    // IMU
-    Vec3 velocity;
-    Vec3 bias_g;
-    Vec3 bias_a;
+  // IMU
+  Vec3 velocity = Vec3::Zero();
+  Vec3 bias_g = Vec3::Zero();
+  Vec3 bias_a = Vec3::Zero();
+  Vec3 delta_bias_g = Vec3::Zero();
+  Vec3 delta_bias_a = Vec3::Zero();
 
-    // preintegration term
-//    std::pair<int refFrameID, Mat33 delta_R>  preintegration_shell;
+  // preintegration term
+  IMUfactor preintegration_shell;
+  bool noIMUfactor = false;
+  std::vector<double> dt;
+  std::vector<Vec3> acc;
+  std::vector<Vec3> gyro;
 
 
 	inline FrameShell()
